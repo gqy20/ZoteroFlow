@@ -10,3 +10,17 @@
 8. **内存流式处理** - 大文件使用流式读写，避免一次性加载到内存
 9. **功能单一职责** - 每个函数只做一件事，避免功能耦合
 10. **渐进式优化** - 先让基础功能跑通，再根据性能需求逐步优化
+
+
+git提交信息规范
+
+  <type>(<scope>): <subject>
+
+  <body>
+
+  <footer>
+
+  示例：
+  - feat(parser): add MinerU PDF parsing support
+  - fix(core): resolve CSV record encoding issue
+  - docs(readme): update installation instructions
