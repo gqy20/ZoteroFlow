@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -21,6 +22,14 @@ type ZoteroItem struct {
 	Tags     []string `json:"tags"`
 	PDFPath  string   `json:"pdf_path"`
 	PDFName  string   `json:"pdf_name"`
+}
+
+// SearchResult 搜索结果 - 扩展 ZoteroItem
+type SearchResult struct {
+	ZoteroItem
+	Score   float64 `json:"score"`
+	DOI     string  `json:"doi,omitempty"`
+	Journal string  `json:"journal,omitempty"`
 }
 
 // ZoteroDB Zotero数据库访问器
@@ -616,4 +625,79 @@ func (z *ZoteroDB) extractFilenameFromAttachmentsPath(pathPart string) string {
 
 	log.Printf("从 attachments 路径提取文件名: %s -> %s", pathPart, filename)
 	return filename
+}
+
+// SearchByTitle 按标题搜索文献（替代 search.go 中的实现）
+func (z *ZoteroDB) SearchByTitle(query string, limit int) ([]SearchResult, error) {
+	log.Printf("搜索文献: %s", query)
+
+	query = strings.TrimSpace(strings.ToLower(query))
+	if query == "" {
+		return nil, fmt.Errorf("搜索查询不能为空")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	// 1. 获取所有PDF文献
+	items, err := z.GetItemsWithPDF(limit * 3) // 获取更多数据用于筛选
+	if err != nil {
+		return nil, fmt.Errorf("获取文献失败: %w", err)
+	}
+
+	// 2. 标题过滤和评分
+	var results []SearchResult
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item.Title), query) {
+			// 简单的评分算法：匹配度 + 日期权重
+			score := calculateSearchScore(item.Title, query)
+
+			result := SearchResult{
+				ZoteroItem: item,
+				Score:      score,
+			}
+
+			results = append(results, result)
+		}
+	}
+
+	// 3. 按评分排序
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	// 4. 限制结果数量
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	log.Printf("找到 %d 篇匹配文献", len(results))
+	return results, nil
+}
+
+// calculateSearchScore 计算搜索评分
+func calculateSearchScore(title, query string) float64 {
+	title = strings.ToLower(title)
+	query = strings.ToLower(query)
+
+	// 基础评分：匹配度
+	if title == query {
+		return 100.0 // 完全匹配
+	}
+
+	if strings.HasPrefix(title, query) || strings.HasSuffix(title, query) {
+		return 80.0 // 前缀或后缀匹配
+	}
+
+	// 计算查询词在标题中的出现频率
+	count := strings.Count(title, query)
+	if count > 0 {
+		score := 50.0 + float64(count)*10.0
+		if score > 100.0 {
+			score = 100.0
+		}
+		return score
+	}
+
+	return 30.0 // 包含匹配
 }

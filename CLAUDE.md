@@ -28,6 +28,7 @@ make dev                # 直接运行 go run .
 make test               # 运行测试（含竞态检测）
 make test-coverage      # 生成覆盖率报告 (coverage.html)
 go test -v ./...        # 详细测试输出
+go run -tags test server/tests/test_mineru.go   # MinerU API 集成测试（需要 test 标签）
 ```
 
 **代码质量**：
@@ -47,7 +48,8 @@ make mod-upgrade        # 升级所有依赖
 
 **特殊测试**：
 ```bash
-go run test_mineru.go   # MinerU API 集成测试
+# 需要特殊构建标签的集成测试
+go run -tags test server/tests/test_mineru.go   # MinerU API 集成测试
 ```
 
 ### 测试端 (tests/)
@@ -58,6 +60,16 @@ cd tests/
 python3 test_article_mcp.py    # Article MCP 完整集成测试
 go run test_complete.go        # 完整工作流测试
 go run test_flow.go           # 流程测试
+```
+
+**CLI 命令示例**：
+```bash
+# 从项目根目录运行
+./server/bin/zoteroflow2 list                    # 列出解析结果
+./server/bin/zoteroflow2 search "关键词"          # 搜索文献
+./server/bin/zoteroflow2 doi "10.xxxx/xxxx"      # DOI解析
+./server/bin/zoteroflow2 chat                    # AI对话
+./server/bin/zoteroflow2 chat --doc=文献名 "问题"  # 基于文献的对话
 ```
 
 ## 核心架构
@@ -100,6 +112,15 @@ go run test_flow.go           # 流程测试
 4. 查询 Zotero 获取 PDF 项目
 5. 对每个 PDF：查找文件 → 上传到 MinerU → 获取解析结果
 6. 在 `CACHE_DIR` 中缓存结果
+7. 解析结果自动组织到 `data/results/` 目录，按日期命名
+
+### CLI 接口
+
+主程序支持多种命令模式：
+- **文献管理**: `list`, `open`, `search`, `doi`
+- **AI 对话**: `chat`, `chat --doc=文献名`
+- **数据维护**: `clean`, `help`
+- **默认行为**: 运行基础集成测试
 
 ## 开发规范
 
@@ -118,8 +139,13 @@ go run test_flow.go           # 流程测试
 
 ### 测试策略
 - 当前单元测试较少（覆盖率显示 0%）
-- `test_mineru.go` 中的集成测试验证 MinerU API 连接性
+- 集成测试分布在多个文件中：
+  - `server/tests/test_mineru.go`: MinerU API 集成测试（需要 `test` 构建标签）
+  - `tests/test_complete.go`: 完整工作流测试
+  - `tests/test_flow.go`: 流程测试
+  - `tests/test_article_mcp.py`: Article MCP 协议集成测试
 - 使用 `make test-coverage` 生成覆盖率报告
+- MCP 协议测试验证与 Claude Desktop 等客户端的兼容性
 
 ## MCP 集成
 
@@ -151,8 +177,26 @@ go run test_flow.go           # 流程测试
 
 ## 开发提示
 
-- 使用 `make help` 查看所有可用命令
-- 开发前先运行 `make quick` 进行快速检查
-- 提交前确保 `make check` 通过
+- 使用 `make quick` 进行快速检查（格式化 + go vet）
+- 提交前确保 `make check` 通过（包含完整测试套件）
 - MinerU 测试需要有效的 `MINERU_TOKEN` 环境变量
 - Zotero 数据库路径需要正确配置才能运行完整测试
+- 集成测试需要特殊构建标签：`go run -tags test server/tests/test_mineru.go`
+- AI 对话功能需要配置 `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` 环境变量
+- 解析结果存储在 `data/results/` 目录，按日期自动组织
+- 使用 `./server/bin/zoteroflow2 help` 查看 CLI 命令帮助
+
+## 项目状态
+
+### ✅ 已完成 (v0.8)
+- Article MCP 集成 (~300行)
+- Go MCP 客户端 (~200行)
+- AI 智能分析 (~100行)
+- 完整 CLI 接口 (~700行)
+- Zotero 数据库集成 (~620行)
+
+### 🔧 待实现
+- MinerU PDF 解析 (~200行)
+- 整合工作流 (~100行)
+
+**总代码约束**: 不超过 1000 行（核心功能优先）

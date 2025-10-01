@@ -8,6 +8,17 @@ PKG_NAME=zoteroflow2-server
 build:
 	go build -o bin/$(BINARY_NAME) .
 
+# 生产构建 - 功能完整且最小
+build-prod:  # 生产版本（完整功能 + UPX压缩）
+	CGO_ENABLED=1 go build -ldflags="-w -s" -o bin/$(BINARY_NAME)-prod .
+	upx --best --lzma bin/$(BINARY_NAME)-prod -o bin/$(BINARY_NAME)
+	@echo "生产版本构建完成，大小："
+	@ls -lh bin/$(BINARY_NAME)
+
+# 开发构建 - 调试友好
+build-dev:   # 开发版本（保留调试信息）
+	go build -o bin/$(BINARY_NAME)-dev .
+
 test:
 	go test -v -race ./...
 

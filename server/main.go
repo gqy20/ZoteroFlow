@@ -73,23 +73,32 @@ func handleCommand(args []string) {
 func showHelp() {
 	fmt.Println("ZoteroFlow2 - PDF文献管理工具")
 	fmt.Println()
-	fmt.Println("命令:")
+	fmt.Println("📚 文献管理:")
 	fmt.Println("  list                    - 列出所有解析结果")
 	fmt.Println("  open <名称>             - 打开指定文献文件夹")
 	fmt.Println("  search <关键词>         - 按标题搜索并解析文献")
 	fmt.Println("  doi <DOI号>             - 按DOI搜索并解析文献")
-	fmt.Println("  chat [消息]             - AI学术助手对话")
-	fmt.Println("  chat --doc=文献名 [消息] - 基于指定文献的AI对话")
+	fmt.Println()
+	fmt.Println("🤖 AI助手对话:")
+	fmt.Println("  chat                    - 进入交互式AI对话模式")
+	fmt.Println("  chat <问题>             - 单次AI问答")
+	fmt.Println("  chat --doc=文献名 <问题> - 基于指定文献的AI对话")
+	fmt.Println()
+	fmt.Println("🔧 维护命令:")
 	fmt.Println("  clean                   - 清理重复/损坏文件")
 	fmt.Println("  help                    - 显示此帮助信息")
 	fmt.Println()
-	fmt.Println("示例:")
-	fmt.Println("  ./zoteroflow2 list")
-	fmt.Println("  ./zoteroflow2 open 丛枝菌根")
-	fmt.Println("  ./zoteroflow2 search \"solanum chromosome\"")
-	fmt.Println("  ./zoteroflow2 doi \"10.1111/j.1469-8137.2012.04195.x\"")
-	fmt.Println("  ./zoteroflow2 chat")
-	fmt.Println("  ./zoteroflow2 chat \"请解释一下什么是基因组学\"")
+	fmt.Println("💡 使用示例:")
+	fmt.Println("  ./zoteroflow2 list                                    # 列出文献")
+	fmt.Println("  ./zoteroflow2 search \"机器学习\"                      # 搜索文献")
+	fmt.Println("  ./zoteroflow2 chat \"什么是深度学习？\"                # AI问答")
+	fmt.Println("  ./zoteroflow2 chat --doc=基因组 \"介绍一下CRISPR\"        # 基于文献的AI对话")
+	fmt.Println()
+	fmt.Println("🎯 AI功能特性:")
+	fmt.Println("  • 支持学术文献分析和解释")
+	fmt.Println("  • 可基于特定文献内容进行对话")
+	fmt.Println("  • 交互式对话模式支持上下文记忆")
+	fmt.Println("  • 单次问答模式，适合快速查询")
 }
 
 // listResults 列出所有解析结果
@@ -261,12 +270,17 @@ func searchAndParse(query, searchType string) {
 	fmt.Printf("\n📄 找到 %d 篇文献:\n", len(results))
 	for i, result := range results {
 		fmt.Printf("  %d. 标题: %s (评分: %.1f)\n", i+1, result.Title, result.Score)
-		fmt.Printf("     作者: %s\n", result.Authors)
+		// 显示作者列表
+		authorsStr := "未知作者"
+		if len(result.Authors) > 0 {
+			authorsStr = strings.Join(result.Authors, "; ")
+		}
+		fmt.Printf("     作者: %s\n", authorsStr)
 		if result.Journal != "" {
 			fmt.Printf("     期刊: %s\n", result.Journal)
 		}
-		if result.Year != "" {
-			fmt.Printf("     年份: %s\n", result.Year)
+		if result.Year != 0 {
+			fmt.Printf("     年份: %d\n", result.Year)
 		}
 		if result.DOI != "" {
 			fmt.Printf("     DOI: %s\n", result.DOI)
@@ -570,16 +584,24 @@ func findDocumentContext(docName string) (*core.DocumentContext, error) {
 
 // chatWithAI 单次AI对话
 func chatWithAI(message string) {
+	if strings.TrimSpace(message) == "" {
+		fmt.Println("❌ 请输入有效的消息内容")
+		return
+	}
+
+	fmt.Printf("🤖 正在向AI发送问题: %s\n", message)
+
 	// 加载配置
 	cfg, err := config.Load()
 	if err != nil {
-		log.Printf("加载配置失败: %v", err)
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
 		return
 	}
 
 	// 检查AI配置
 	if cfg.AIAPIKey == "" {
 		fmt.Println("❌ AI功能未配置，请设置 AI_API_KEY 环境变量")
+		fmt.Println("示例: export AI_API_KEY=your_api_key_here")
 		return
 	}
 
@@ -590,7 +612,7 @@ func chatWithAI(message string) {
 	messages := []core.ChatMessage{
 		{
 			Role:    "system",
-			Content: "你是一个专业的学术文献助手，请用中文提供准确、有用的信息。",
+			Content: "你是一个专业的学术文献助手，请用中文提供准确、有用的信息。回答要简洁明了。",
 		},
 		{
 			Role:    "user",
@@ -602,25 +624,44 @@ func chatWithAI(message string) {
 	req := &core.AIRequest{
 		Model:    cfg.AIModel,
 		Messages: messages,
+		// 限制输出长度，避免超时
+		MaxTokens: 500,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
 	response, err := client.Chat(ctx, req)
 	if err != nil {
 		fmt.Printf("❌ AI响应失败: %v\n", err)
+		fmt.Println("💡 可能的原因:")
+		fmt.Println("   - 网络连接问题")
+		fmt.Println("   - API密钥无效")
+		fmt.Println("   - 请求超时")
 		return
 	}
 
 	if len(response.Choices) > 0 {
-		fmt.Printf("🤖 助手: %s\n", response.Choices[0].Message.Content)
-		fmt.Printf("\n📊 Token使用: %d (输入) + %d (输出) = %d (总计)\n",
-			response.Usage.PromptTokens,
-			response.Usage.CompletionTokens,
-			response.Usage.TotalTokens)
+		aiResponse := response.Choices[0].Message.Content
+		if aiResponse == "" {
+			// 如果content为空，检查是否有思考过程
+			fmt.Printf("🤖 助手: 正在思考...\n")
+			fmt.Printf("💡 AI正在处理您的问题，请稍等片刻\n")
+			fmt.Printf("   或使用交互模式进行更详细的对话: ./zoteroflow2 chat\n")
+		} else {
+			fmt.Printf("🤖 助手: %s\n", aiResponse)
+			fmt.Printf("\n📊 Token使用: %d (输入) + %d (输出) = %d (总计)\n",
+				response.Usage.PromptTokens,
+				response.Usage.CompletionTokens,
+				response.Usage.TotalTokens)
+		}
 	} else {
 		fmt.Println("❌ 未收到AI响应")
+	}
+
+	// 显示调试信息
+	if response.Usage.TotalTokens > 0 {
+		log.Printf("✅ AI响应成功，Token使用: %d", response.Usage.TotalTokens)
 	}
 }
 
