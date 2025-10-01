@@ -3,12 +3,12 @@ package core
 import (
 	"database/sql"
 	"fmt"
+	_ "github.com/mattn/go-sqlite3"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 // ZoteroItem 简化的Zotero文献项结构 (30行)
@@ -25,9 +25,9 @@ type ZoteroItem struct {
 
 // ZoteroDB Zotero数据库访问器
 type ZoteroDB struct {
-	db       *sql.DB
-	dataDir  string
-	dbPath   string
+	db      *sql.DB
+	dataDir string
+	dbPath  string
 }
 
 // NewZoteroDB 连接Zotero数据库 (30行)

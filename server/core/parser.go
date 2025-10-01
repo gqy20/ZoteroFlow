@@ -13,20 +13,20 @@ import (
 
 // PDFParser PDF解析器 (150行)
 type PDFParser struct {
-	zoteroDB    *ZoteroDB
+	zoteroDB     *ZoteroDB
 	mineruClient *MinerUClient
-	cacheDir    string
+	cacheDir     string
 }
 
 // ParsedDocument 解析后的文档
 type ParsedDocument struct {
 	ZoteroItem ZoteroItem `json:"zotero_item"`
-	ParseHash  string    `json:"parse_hash"`
-	Content    string    `json:"content"`    // Markdown格式内容
-	Summary    string    `json:"summary"`    // AI生成的摘要
-	KeyPoints  []string  `json:"key_points"`  // 关键要点
-	ZipPath    string    `json:"zip_path"`    // ZIP文件路径
-	ParseTime  time.Time `json:"parse_time"`
+	ParseHash  string     `json:"parse_hash"`
+	Content    string     `json:"content"`    // Markdown格式内容
+	Summary    string     `json:"summary"`    // AI生成的摘要
+	KeyPoints  []string   `json:"key_points"` // 关键要点
+	ZipPath    string     `json:"zip_path"`   // ZIP文件路径
+	ParseTime  time.Time  `json:"parse_time"`
 }
 
 // NewPDFParser 创建PDF解析器 (30行)
@@ -99,7 +99,7 @@ func (p *PDFParser) BatchParseDocuments(ctx context.Context, itemIDs []int) ([]*
 	var results []*ParsedDocument
 	var errors []error
 
-	for i, itemID := range itemIDs {
+	for _, itemID := range itemIDs {
 		// 首先获取PDF路径
 		items, err := p.zoteroDB.GetItemsWithPDF(1)
 		if err != nil {
@@ -115,19 +115,20 @@ func (p *PDFParser) BatchParseDocuments(ctx context.Context, itemIDs []int) ([]*
 		// 这里需要从数据库获取实际的PDF路径
 		// 暂时跳过，因为我们需要先实现PDF路径查找
 		log.Printf("ItemID %d: PDF路径查找功能待实现", itemID)
-		continue
 
-		// 解析文档
-		doc, err := p.ParseDocument(ctx, itemID, "")
-		if err != nil {
-			errors = append(errors, fmt.Errorf("ItemID %d: %w", itemID, err))
-			continue
-		}
+		// TODO: 实现PDF路径查找后启用解析
+		/*
+			doc, err := p.ParseDocument(ctx, itemID, "")
+			if err != nil {
+				errors = append(errors, fmt.Errorf("ItemID %d: %w", itemID, err))
+				continue
+			}
 
-		results = append(results, doc)
+			results = append(results, doc)
 
-		// 显示进度
-		log.Printf("进度: %d/%d 完成", i+1, len(itemIDs))
+			// 显示进度
+			log.Printf("Progress: %d/%d completed", i+1, len(itemIDs))
+		*/
 	}
 
 	if len(errors) > 0 {

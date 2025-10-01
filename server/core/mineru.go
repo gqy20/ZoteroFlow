@@ -24,61 +24,73 @@ type MinerUClient struct {
 	Timeout    time.Duration
 }
 
+// FileInfo 文件信息
+type FileInfo struct {
+	Name  string `json:"name"`
+	IsOCR bool   `json:"is_ocr"`
+}
+
 // BatchRequest 批量提交请求
 type BatchRequest struct {
-	Language string `json:"language"`
-	Files     []struct {
-		Name  string `json:"name"`
-		IsOCR bool   `json:"is_ocr"`
-	} `json:"files"`
+	Language string     `json:"language"`
+	Files    []FileInfo `json:"files"`
+}
+
+// BatchData 批量响应数据
+type BatchData struct {
+	BatchID  string   `json:"batch_id"`
+	FileURLs []string `json:"file_urls"`
 }
 
 // BatchResponse 批量提交响应
 type BatchResponse struct {
-	Data struct {
-		BatchID  string   `json:"batch_id"`
-		FileURLs []string `json:"file_urls"`
-	} `json:"data"`
+	Data BatchData `json:"data"`
+}
+
+// ExtractResult 提取结果
+type ExtractResult struct {
+	FileName   string `json:"file_name"`
+	State      string `json:"state"`
+	FullZipURL string `json:"full_zip_url,omitempty"`
+}
+
+// StatusData 状态查询数据
+type StatusData struct {
+	ExtractResult []ExtractResult `json:"extract_result"`
 }
 
 // StatusResponse 状态查询响应
 type StatusResponse struct {
-	Data struct {
-		ExtractResult []struct {
-			FileName   string `json:"file_name"`
-			State      string `json:"state"`
-			FullZipURL string `json:"full_zip_url,omitempty"`
-		} `json:"extract_result"`
-	} `json:"data"`
+	Data StatusData `json:"data"`
 }
 
 // ParseResult 解析结果
 type ParseResult struct {
-	TaskID      string    `json:"task_id"`
-	Status      string    `json:"status"`
-	Content     string    `json:"content"`
-	Message     string    `json:"message"`
-	ErrorCode   string    `json:"error_code"`
-	ZipPath     string    `json:"zip_path"`
-	ParseTime   time.Time `json:"parse_time"`
-	PDFPath     string    `json:"pdf_path"`
-	FileName    string    `json:"file_name"`
-	FileSize    int64     `json:"file_size"`
-	Duration    int64     `json:"duration_ms"` // 解析耗时（毫秒）
+	TaskID    string    `json:"task_id"`
+	Status    string    `json:"status"`
+	Content   string    `json:"content"`
+	Message   string    `json:"message"`
+	ErrorCode string    `json:"error_code"`
+	ZipPath   string    `json:"zip_path"`
+	ParseTime time.Time `json:"parse_time"`
+	PDFPath   string    `json:"pdf_path"`
+	FileName  string    `json:"file_name"`
+	FileSize  int64     `json:"file_size"`
+	Duration  int64     `json:"duration_ms"` // 解析耗时（毫秒）
 }
 
 // ParseRecord CSV记录结构
 type ParseRecord struct {
-	ID          string    `csv:"id"`           // 唯一标识
-	TaskID      string    `csv:"task_id"`      // MinerU任务ID
-	FileName    string    `csv:"file_name"`    // 文件名
-	PDFPath     string    `csv:"pdf_path"`     // PDF路径
-	FileSize    int64     `csv:"file_size"`    // 文件大小（字节）
-	Status      string    `csv:"status"`       // 解析状态
-	ZipPath     string    `csv:"zip_path"`     // 结果ZIP路径
-	ParseTime   time.Time `csv:"parse_time"`   // 解析时间
-	Duration    int64     `csv:"duration_ms"`  // 解析耗时（毫秒）
-	ErrorMessage string   `csv:"error_message"` // 错误信息
+	ID           string    `csv:"id"`            // 唯一标识
+	TaskID       string    `csv:"task_id"`       // MinerU任务ID
+	FileName     string    `csv:"file_name"`     // 文件名
+	PDFPath      string    `csv:"pdf_path"`      // PDF路径
+	FileSize     int64     `csv:"file_size"`     // 文件大小（字节）
+	Status       string    `csv:"status"`        // 解析状态
+	ZipPath      string    `csv:"zip_path"`      // 结果ZIP路径
+	ParseTime    time.Time `csv:"parse_time"`    // 解析时间
+	Duration     int64     `csv:"duration_ms"`   // 解析耗时（毫秒）
+	ErrorMessage string    `csv:"error_message"` // 错误信息
 }
 
 // NewMinerUClient 创建MinerU客户端
@@ -104,7 +116,7 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 	}
 	fileSize := fileInfo.Size()
 
-	log.Printf("开始解析PDF: %s (大小: %d bytes)", fileName, fileSize)
+	log.Printf("Starting PDF parsing: %s (size: %d bytes)", fileName, fileSize)
 
 	// 生成唯一ID
 	recordID := fmt.Sprintf("%d_%s", time.Now().UnixNano(), fileName)
@@ -116,15 +128,15 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 		// 记录失败
 		duration := time.Since(startTime).Milliseconds()
 		recordErr := c.saveParseRecord(ParseRecord{
-			ID:          recordID,
-			TaskID:      "",
-			FileName:    fileName,
-			PDFPath:     pdfPath,
-			FileSize:    fileSize,
-			Status:      "failed",
-			ZipPath:     "",
-			ParseTime:   startTime,
-			Duration:    duration,
+			ID:           recordID,
+			TaskID:       "",
+			FileName:     fileName,
+			PDFPath:      pdfPath,
+			FileSize:     fileSize,
+			Status:       "failed",
+			ZipPath:      "",
+			ParseTime:    startTime,
+			Duration:     duration,
 			ErrorMessage: fmt.Sprintf("提交任务失败: %v", err),
 		})
 		if recordErr != nil {
@@ -143,15 +155,15 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 		// 记录失败
 		duration := time.Since(startTime).Milliseconds()
 		recordErr := c.saveParseRecord(ParseRecord{
-			ID:          recordID,
-			TaskID:      batchID,
-			FileName:    fileName,
-			PDFPath:     pdfPath,
-			FileSize:    fileSize,
-			Status:      "failed",
-			ZipPath:     "",
-			ParseTime:   startTime,
-			Duration:    duration,
+			ID:           recordID,
+			TaskID:       batchID,
+			FileName:     fileName,
+			PDFPath:      pdfPath,
+			FileSize:     fileSize,
+			Status:       "failed",
+			ZipPath:      "",
+			ParseTime:    startTime,
+			Duration:     duration,
 			ErrorMessage: fmt.Sprintf("上传文件失败: %v", err),
 		})
 		if recordErr != nil {
@@ -167,15 +179,15 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 		// 记录失败
 		duration := time.Since(startTime).Milliseconds()
 		recordErr := c.saveParseRecord(ParseRecord{
-			ID:          recordID,
-			TaskID:      batchID,
-			FileName:    fileName,
-			PDFPath:     pdfPath,
-			FileSize:    fileSize,
-			Status:      "failed",
-			ZipPath:     "",
-			ParseTime:   startTime,
-			Duration:    duration,
+			ID:           recordID,
+			TaskID:       batchID,
+			FileName:     fileName,
+			PDFPath:      pdfPath,
+			FileSize:     fileSize,
+			Status:       "failed",
+			ZipPath:      "",
+			ParseTime:    startTime,
+			Duration:     duration,
 			ErrorMessage: fmt.Sprintf("处理失败: %v", err),
 		})
 		if recordErr != nil {
@@ -192,15 +204,15 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 		// 记录失败
 		duration := time.Since(startTime).Milliseconds()
 		recordErr := c.saveParseRecord(ParseRecord{
-			ID:          recordID,
-			TaskID:      batchID,
-			FileName:    fileName,
-			PDFPath:     pdfPath,
-			FileSize:    fileSize,
-			Status:      "failed",
-			ZipPath:     "",
-			ParseTime:   startTime,
-			Duration:    duration,
+			ID:           recordID,
+			TaskID:       batchID,
+			FileName:     fileName,
+			PDFPath:      pdfPath,
+			FileSize:     fileSize,
+			Status:       "failed",
+			ZipPath:      "",
+			ParseTime:    startTime,
+			Duration:     duration,
 			ErrorMessage: fmt.Sprintf("下载结果失败: %v", err),
 		})
 		if recordErr != nil {
@@ -242,7 +254,7 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 		// 不影响主流程
 	}
 
-	log.Printf("✅ 解析完成! 耗时: %dms, 结果保存到: %s", duration, zipPath)
+	log.Printf("Parsing completed successfully! Duration: %dms, Result saved to: %s", duration, zipPath)
 	return result, nil
 }
 
@@ -250,10 +262,7 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 func (c *MinerUClient) submitBatchTask(ctx context.Context, fileName string) (*BatchResponse, error) {
 	payload := BatchRequest{
 		Language: "ch",
-		Files: []struct {
-			Name  string `json:"name"`
-			IsOCR bool   `json:"is_ocr"`
-		}{
+		Files: []FileInfo{
 			{Name: fileName, IsOCR: true},
 		},
 	}
@@ -328,18 +337,21 @@ func (c *MinerUClient) pollStatus(ctx context.Context, batchID string) (string, 
 
 			if len(statusResp.Data.ExtractResult) > 0 {
 				result := statusResp.Data.ExtractResult[0]
-				log.Printf("[%d秒] 状态: %s", (i+1)*10, result.State)
+				log.Printf("[%ds] Status: %s", (i+1)*10, result.State)
 
-				if result.State == "done" {
+				switch result.State {
+				case "done":
 					return result.FullZipURL, nil
-				} else if result.State == "failed" {
-					return "", fmt.Errorf("处理失败")
+				case "failed":
+					return "", fmt.Errorf("processing failed")
+				default:
+					continue
 				}
 			}
 		}
 	}
 
-	return "", fmt.Errorf("处理超时（3分钟内未完成）")
+	return "", fmt.Errorf("processing timeout (no completion within 3 minutes)")
 }
 
 // checkStatus 检查处理状态
@@ -453,7 +465,7 @@ func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 		return fmt.Errorf("写入CSV记录失败: %w", err)
 	}
 
-	log.Printf("✅ 解析记录已保存到: %s", csvPath)
+	log.Printf("Parse record saved to: %s", csvPath)
 	return nil
 }
 

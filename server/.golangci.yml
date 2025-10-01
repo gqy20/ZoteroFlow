@@ -1,0 +1,69 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gosec
+    - misspell
+    - unconvert
+    - dupl
+    - goconst
+    - gocyclo
+    - nolintlint
+    - rowserrcheck
+    - stylecheck
+    - unparam
+    - nakedret
+    - prealloc
+    - exportloopref
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+  goimports:
+    local-prefixes: zoteroflow2-server
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - ifElseChain
+  errcheck:
+    check-type-assertions: true
+    check-blank: false
+
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+
+    # Exclude known linter issues
+    - text: "weak cryptographic primitive"
+      linters:
+        - gosec
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
