@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -22,6 +21,8 @@ type ZoteroItem struct {
 	Tags     []string `json:"tags"`
 	PDFPath  string   `json:"pdf_path"`
 	PDFName  string   `json:"pdf_name"`
+	DOI      string   `json:"doi"`
+	Extra    string   `json:"extra"`
 }
 
 // SearchResult 搜索结果 - 扩展 ZoteroItem
@@ -82,7 +83,8 @@ func (z *ZoteroDB) Close() error {
 func (z *ZoteroDB) GetItemsWithPDF(limit int) ([]ZoteroItem, error) {
 	log.Printf("查询前 %d 篇有PDF附件的文献", limit)
 
-	// 完整查询 - 获取文献信息和PDF附件路径
+	// 简化查询 - 获取文献信息和PDF附件路径
+	log.Printf("开始执行数据库查询...")
 	query := `
 	SELECT DISTINCT
 		i.itemID,
@@ -105,11 +107,13 @@ func (z *ZoteroDB) GetItemsWithPDF(limit int) ([]ZoteroItem, error) {
 	LIMIT ?
 	`
 
+	log.Printf("执行SQL查询，limit=%d", limit)
 	rows, err := z.db.Query(query, limit)
 	if err != nil {
 		return nil, fmt.Errorf("查询失败: %w", err)
 	}
 	defer rows.Close()
+	log.Printf("数据库查询成功，开始解析结果...")
 
 	var items []ZoteroItem
 	for rows.Next() {
@@ -134,7 +138,7 @@ func (z *ZoteroDB) GetItemsWithPDF(limit int) ([]ZoteroItem, error) {
 		}
 
 		// 设置默认值
-		item.Authors = []string{"未知作者"}
+		item.Authors = []string{} // 空的作者列表，不显示"未知作者"
 		item.Year = 0
 		item.Tags = []string{}
 
@@ -524,8 +528,20 @@ func (z *ZoteroDB) parseAttachmentsPath(attachmentsPath string) string {
 
 	log.Printf("解析 attachments 路径: %s", pathPart)
 
-	// 尝试通过数据库查询实际的附件路径
-	// attachments:格式通常需要查询 itemAttachments 表
+	// 简化处理：直接使用数据目录路径 + 附件路径
+	// 避免复杂的数据库查询，提高性能
+	log.Printf("数据目录: %s", z.dataDir)
+	fullPath := filepath.Join(z.dataDir, pathPart)
+	log.Printf("直接构建PDF路径: %s", fullPath)
+
+	// 检查文件是否存在
+	if _, err := os.Stat(fullPath); err == nil {
+		log.Printf("PDF文件存在，返回路径")
+		return fullPath
+	}
+
+	log.Printf("PDF文件不存在，尝试数据库查询...")
+	// 如果直接路径不存在，再尝试数据库查询
 	query := `
 		SELECT ia.path, ii.key as storage_key
 		FROM itemAttachments ia
@@ -639,36 +655,100 @@ func (z *ZoteroDB) SearchByTitle(query string, limit int) ([]SearchResult, error
 		limit = 20
 	}
 
-	// 1. 获取所有PDF文献
-	items, err := z.GetItemsWithPDF(limit * 3) // 获取更多数据用于筛选
+	// 简单直接的数据库查询 - 包含作者信息
+	fullQuery := `
+		SELECT DISTINCT
+			i.itemID,
+			COALESCE(title_val.value, '') as title,
+			COALESCE(creator_val.value, '') as creators,
+			it.typeName as item_type,
+			ia.path as attachment_path,
+			ia.contentType as content_type
+		FROM items i
+		LEFT JOIN itemData id_title ON i.itemID = id_title.itemID
+		LEFT JOIN fieldsCombined fc_title ON id_title.fieldID = fc_title.fieldID AND fc_title.fieldName = 'title'
+		LEFT JOIN itemDataValues title_val ON id_title.valueID = title_val.valueID
+		LEFT JOIN itemData id_creator ON i.itemID = id_creator.itemID
+		LEFT JOIN fieldsCombined fc_creator ON id_creator.fieldID = fc_creator.fieldID AND fc_creator.fieldName IN ('author', 'creator')
+		LEFT JOIN itemDataValues creator_val ON id_creator.valueID = creator_val.valueID
+		LEFT JOIN itemAttachments ia ON i.itemID = ia.parentItemID
+		LEFT JOIN itemTypes it ON it.itemTypeID = i.itemTypeID
+		WHERE ia.contentType = 'application/pdf'
+		AND title_val.value LIKE ?
+		ORDER BY i.dateAdded DESC
+		LIMIT ?
+	`
+
+	// 直接使用查询字符串，不做任何转换
+	searchPattern := "%" + query + "%"
+	args := []interface{}{searchPattern, limit}
+
+	log.Printf("执行简单搜索查询: %s", searchPattern)
+
+	rows, err := z.db.Query(fullQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("获取文献失败: %w", err)
+		return nil, fmt.Errorf("数据库搜索失败: %w", err)
 	}
+	defer rows.Close()
 
-	// 2. 标题过滤和评分
 	var results []SearchResult
-	for _, item := range items {
-		if strings.Contains(strings.ToLower(item.Title), query) {
-			// 简单的评分算法：匹配度 + 日期权重
-			score := calculateSearchScore(item.Title, query)
+	for rows.Next() {
+		var item ZoteroItem
+		var attachmentPath, contentType, creators string
 
-			result := SearchResult{
-				ZoteroItem: item,
-				Score:      score,
-			}
-
-			results = append(results, result)
+		err := rows.Scan(
+			&item.ItemID,
+			&item.Title,
+			&creators,
+			&item.ItemType,
+			&attachmentPath,
+			&contentType,
+		)
+		if err != nil {
+			log.Printf("扫描行数据失败: %v", err)
+			continue
 		}
-	}
 
-	// 3. 按评分排序
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Score > results[j].Score
-	})
+		// 如果没有标题，使用默认值
+		if item.Title == "" {
+			item.Title = fmt.Sprintf("文献 #%d", item.ItemID)
+		}
 
-	// 4. 限制结果数量
-	if len(results) > limit {
-		results = results[:limit]
+		// 解析作者信息
+		if creators != "" {
+			item.Authors = parseAuthors(creators)
+		} else {
+			item.Authors = []string{} // 空的作者列表，不显示"未知作者"
+		}
+		item.Year = 0
+		item.Tags = []string{}
+
+		// 构建PDF路径
+		if attachmentPath != "" {
+			item.PDFPath = z.buildPDFPath(attachmentPath)
+			// 从路径中提取文件名
+			item.PDFName = z.extractFilenameFromPath(attachmentPath)
+		}
+
+		// 只有成功找到PDF路径才添加到结果中
+		if item.PDFPath != "" {
+			// 验证文件是否存在
+			if _, err := os.Stat(item.PDFPath); err == nil {
+				// 简单评分：完全匹配得分高
+				score := 50.0
+				if strings.Contains(strings.ToLower(item.Title), query) {
+					score = 100.0
+				}
+
+				result := SearchResult{
+					ZoteroItem: item,
+					Score:      score,
+				}
+
+				results = append(results, result)
+				log.Printf("找到匹配文献: ID=%d, 标题=%s", item.ItemID, item.Title)
+			}
+		}
 	}
 
 	log.Printf("找到 %d 篇匹配文献", len(results))

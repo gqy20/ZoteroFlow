@@ -61,6 +61,8 @@ func handleCommand(args []string) {
 				chatWithAI(strings.Join(args[1:], " "))
 			}
 		}
+	case "test-extract":
+		testExtraction()
 	case "help":
 		showHelp()
 	default:
@@ -103,7 +105,13 @@ func showHelp() {
 
 // listResults 列出所有解析结果
 func listResults() {
-	resultsDir := "data/results"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("配置加载失败: %v", err)
+		return
+	}
+
+	resultsDir := cfg.ResultsDir
 
 	entries, err := os.ReadDir(resultsDir)
 	if err != nil {
@@ -130,7 +138,13 @@ func listResults() {
 
 // openResult 打开指定文献
 func openResult(name string) {
-	resultsDir := "data/results"
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("配置加载失败: %v", err)
+		return
+	}
+
+	resultsDir := cfg.ResultsDir
 
 	entries, err := os.ReadDir(resultsDir)
 	if err != nil {
@@ -247,6 +261,7 @@ func searchAndParse(query, searchType string) {
 	}
 
 	// 连接数据库
+	log.Printf("配置数据目录: %s", cfg.ZoteroDataDir)
 	zoteroDB, err := core.NewZoteroDB(cfg.ZoteroDBPath, cfg.ZoteroDataDir)
 	if err != nil {
 		log.Printf("连接数据库失败: %v", err)
@@ -312,7 +327,7 @@ func parseDocument(pdfPath string, cfg *config.Config) {
 	mineruClient := core.NewMinerUClient(cfg.MineruAPIURL, cfg.MineruToken)
 
 	log.Println("🚀 开始解析PDF...")
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MineruTimeout)*time.Second)
 	defer cancel()
 
 	startTime := time.Now()
@@ -332,7 +347,7 @@ func parseDocument(pdfPath string, cfg *config.Config) {
 
 	if result.ZipPath != "" {
 		fmt.Printf("  ZIP文件: %s\n", result.ZipPath)
-		fmt.Printf("\n📁 文件已自动组织到: data/results/\n")
+		fmt.Printf("\n📁 文件已自动组织到: %s/\n", cfg.ResultsDir)
 		fmt.Printf("使用 './zoteroflow2 list' 查看所有结果\n")
 	}
 }
@@ -524,7 +539,12 @@ func chatWithDocument(docName, message string) {
 
 // findDocumentContext 查找指定文献的上下文
 func findDocumentContext(docName string) (*core.DocumentContext, error) {
-	resultsDir := "data/results"
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("配置加载失败: %w", err)
+	}
+
+	resultsDir := cfg.ResultsDir
 
 	// 首先尝试精确匹配文件名
 	entries, err := os.ReadDir(resultsDir)
@@ -628,7 +648,7 @@ func chatWithAI(message string) {
 		MaxTokens: 500,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.AITimeout)*time.Second)
 	defer cancel()
 
 	response, err := client.Chat(ctx, req)
@@ -688,8 +708,18 @@ func extractSimpleAbstract(content string) string {
 			// 返回摘要的第一部分
 			abstract := strings.TrimPrefix(line, "摘要：")
 			abstract = strings.TrimPrefix(abstract, "Abstract:")
-			if len(abstract) > 200 {
-				return abstract[:200] + "..."
+
+			// 使用配置的长度限制
+			cfg, err := config.Load()
+			if err == nil {
+				if len(abstract) > cfg.AbstractLength {
+					return abstract[:cfg.AbstractLength] + "..."
+				}
+			} else {
+				// 如果配置加载失败，使用默认值
+				if len(abstract) > 200 {
+					return abstract[:200] + "..."
+				}
 			}
 			return abstract
 		}
@@ -729,4 +759,47 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// testExtraction 测试ZIP文件提取功能
+func testExtraction() {
+	log.SetOutput(os.Stdout)
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	zipPath := "/tmp/test_organization/test.zip"
+	pdfPath := "/tmp/test.pdf"
+
+	// 创建测试PDF文件
+	if err := os.WriteFile(pdfPath, []byte("test pdf content"), 0644); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("开始测试ZIP文件提取功能...")
+	fmt.Printf("ZIP文件: %s\n", zipPath)
+	fmt.Printf("PDF文件: %s\n", pdfPath)
+
+	if err := core.OrganizeResult(zipPath, pdfPath); err != nil {
+		log.Printf("组织失败: %v", err)
+	} else {
+		fmt.Println("组织完成")
+	}
+
+	// 检查结果
+	resultDir := "data/results"
+	if entries, err := os.ReadDir(resultDir); err == nil {
+		fmt.Printf("结果目录内容:\n")
+		for _, entry := range entries {
+			if entry.IsDir() {
+				fmt.Printf("  %s/\n", entry.Name())
+				// 检查子目录内容
+				subPath := filepath.Join(resultDir, entry.Name())
+				if files, err := os.ReadDir(subPath); err == nil {
+					for _, file := range files {
+						info, _ := file.Info()
+						fmt.Printf("    %s (%d bytes)\n", file.Name(), info.Size())
+					}
+				}
+			}
+		}
+	}
 }

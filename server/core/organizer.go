@@ -48,10 +48,16 @@ func OrganizeResult(zipPath, pdfPath string) error {
 		log.Printf("复制PDF失败: %v", err)
 	}
 
-	// 4. 移动ZIP文件
+	// 4. 移动ZIP文件（处理跨设备移动）
 	targetZIP := filepath.Join(targetDir, "raw.zip")
 	if err := os.Rename(zipPath, targetZIP); err != nil {
-		log.Printf("移动ZIP失败: %v", err)
+		log.Printf("移动ZIP失败，尝试复制: %v", err)
+		// 如果是跨设备问题，使用复制然后删除的方式
+		if err := copyFile(zipPath, targetZIP); err != nil {
+			log.Printf("复制ZIP失败: %v", err)
+		} else {
+			os.Remove(zipPath)
+		}
 	}
 
 	// 5. 生成简单元数据
@@ -121,7 +127,11 @@ func unzipFile(zipPath, targetDir string) error {
 	}
 	defer reader.Close()
 
-	// 创建images目录
+	// 创建目标目录和images目录
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+
 	imagesDir := filepath.Join(targetDir, "images")
 	os.MkdirAll(imagesDir, 0755)
 
@@ -150,9 +160,19 @@ func unzipFile(zipPath, targetDir string) error {
 
 // extractFile 提取单个文件
 func extractFile(file *zip.File, targetPath, imagesDir string) error {
+	log.Printf("正在提取文件: %s -> %s", file.Name, targetPath)
+
+	// 确保目标目录存在
+	targetDir := filepath.Dir(targetPath)
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		log.Printf("创建目标目录失败 %s: %v", targetDir, err)
+		return fmt.Errorf("创建目标目录失败: %w", err)
+	}
+
 	src, err := file.Open()
 	if err != nil {
-		return err
+		log.Printf("打开ZIP内文件失败 %s: %v", file.Name, err)
+		return fmt.Errorf("打开ZIP文件失败: %w", err)
 	}
 	defer src.Close()
 
@@ -160,16 +180,58 @@ func extractFile(file *zip.File, targetPath, imagesDir string) error {
 	if isImageFile(file.Name) {
 		filename := filepath.Base(file.Name)
 		targetPath = filepath.Join(imagesDir, filename)
+		log.Printf("图片文件，重新定位到: %s", targetPath)
+
+		// 确保images目录存在
+		if err := os.MkdirAll(imagesDir, 0755); err != nil {
+			log.Printf("创建images目录失败 %s: %v", imagesDir, err)
+			return fmt.Errorf("创建images目录失败: %w", err)
+		}
 	}
+
+	// 检查目标路径的目录
+	targetDir = filepath.Dir(targetPath)
+	if targetDir != "." {
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			log.Printf("创建最终目标目录失败 %s: %v", targetDir, err)
+			return fmt.Errorf("创建最终目标目录失败: %w", err)
+		}
+	}
+
+	log.Printf("准备创建文件: %s (权限: %v)", targetPath, file.FileInfo().Mode())
 
 	dst, err := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.FileInfo().Mode())
 	if err != nil {
-		return err
+		log.Printf("创建目标文件失败 %s: %v", targetPath, err)
+		return fmt.Errorf("创建目标文件失败: %w", err)
 	}
 	defer dst.Close()
 
-	_, err = io.Copy(dst, src)
-	return err
+	// 获取文件大小用于进度显示
+	fileSize := file.FileInfo().Size()
+	log.Printf("开始复制文件: %s (大小: %d bytes)", file.Name, fileSize)
+
+	written, err := io.Copy(dst, src)
+	if err != nil {
+		log.Printf("复制文件失败 %s: %v", file.Name, err)
+		return fmt.Errorf("文件复制失败: %w", err)
+	}
+
+	// 验证写入的字节数
+	if written != fileSize {
+		log.Printf("警告: 文件大小不匹配 %s: 期望 %d bytes, 实际 %d bytes", file.Name, fileSize, written)
+	} else {
+		log.Printf("成功提取文件: %s (%d bytes)", file.Name, written)
+	}
+
+	// 验证文件是否真的被创建了
+	if stat, err := os.Stat(targetPath); err == nil {
+		log.Printf("文件验证成功: %s (大小: %d bytes)", targetPath, stat.Size())
+	} else {
+		log.Printf("文件验证失败: %s: %v", targetPath, err)
+	}
+
+	return nil
 }
 
 // isImageFile 检查是否为图片文件

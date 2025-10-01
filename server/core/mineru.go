@@ -196,9 +196,9 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 		return nil, fmt.Errorf("处理失败: %w", err)
 	}
 
-	// 4. 下载结果到data/results目录
+	// 4. 下载结果到配置的结果目录
 	log.Printf("步骤4: 下载解析结果")
-	resultsDir := "data/results"
+	resultsDir := "data/results" // TODO: 从配置读取
 	zipPath := filepath.Join(resultsDir, fileName+".zip")
 	if err := c.downloadResult(ctx, resultURL, zipPath); err != nil {
 		// 记录失败
@@ -332,10 +332,12 @@ func (c *MinerUClient) uploadFile(ctx context.Context, uploadURL, filePath strin
 
 // pollStatus 轮询处理状态
 func (c *MinerUClient) pollStatus(ctx context.Context, batchID string) (string, error) {
+	log.Printf("开始轮询处理状态，任务ID: %s", batchID)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for i := 0; i < 18; i++ { // 3分钟超时
+		log.Printf("轮询第 %d 次 (等待 %d 秒)", i+1, (i+1)*10)
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
