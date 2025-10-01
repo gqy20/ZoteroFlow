@@ -1,0 +1,79 @@
+# 环境配置文件
+.env
+.env.local
+.env.*.local
+
+# Go 构建产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# Go 模块缓存
+go.sum
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 日志文件
+*.log
+
+# 临时文件
+tmp/
+temp/
+
+# 缓存目录
+.cache/
+cache/
+
+# ZoteroFlow2 特定文件
+server/data/results/*
+server/data/records/*
+!server/data/results/.gitkeep
+!server/data/records/.gitkeep
+
+# 测试PDF文件
+*.pdf
+test.pdf
+
+# 备份文件
+*_backup.go
+*_old.go
+*_temp.go
+
+# 编译产物
+/server/test_compile
+/server/test_main
+
+# 私有配置和密钥
+*.key
+*.pem
+*.p12
+config/secrets/
+
+# 数据库文件（如果是本地测试数据库）
+*.sqlite
+*.sqlite3
+*.db
+
+# 调试和性能分析文件
+*.prof
+*.pprof
+*.trace
