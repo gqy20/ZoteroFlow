@@ -255,6 +255,16 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 	}
 
 	log.Printf("Parsing completed successfully! Duration: %dms, Result saved to: %s", duration, zipPath)
+
+	// 异步组织文件，不阻塞主流程
+	go func() {
+		if err := OrganizeResult(zipPath, pdfPath); err != nil {
+			log.Printf("文件组织失败: %v", err)
+		} else {
+			log.Printf("文件组织完成")
+		}
+	}()
+
 	return result, nil
 }
 

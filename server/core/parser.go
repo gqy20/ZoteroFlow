@@ -43,6 +43,11 @@ func NewPDFParser(zoteroDB *ZoteroDB, mineruClient *MinerUClient, cacheDir strin
 	}, nil
 }
 
+// GetZoteroDB 获取Zotero数据库连接
+func (p *PDFParser) GetZoteroDB() *ZoteroDB {
+	return p.zoteroDB
+}
+
 // ParseDocument 解析单个文档 (100行)
 func (p *PDFParser) ParseDocument(ctx context.Context, itemID int, pdfPath string) (*ParsedDocument, error) {
 	log.Printf("开始解析文档 ItemID: %d", itemID)
@@ -92,15 +97,15 @@ func (p *PDFParser) ParseDocument(ctx context.Context, itemID int, pdfPath strin
 	return parsedDoc, nil
 }
 
-// BatchParseDocuments 批量解析文档 (50行)
+// BatchParseDocuments 批量解析文档 (完整实现)
 func (p *PDFParser) BatchParseDocuments(ctx context.Context, itemIDs []int) ([]*ParsedDocument, error) {
 	log.Printf("开始批量解析 %d 篇文档", len(itemIDs))
 
 	var results []*ParsedDocument
 	var errors []error
 
-	for _, itemID := range itemIDs {
-		// 首先获取PDF路径
+	for i, itemID := range itemIDs {
+		// 获取文献信息（包含PDF路径）
 		items, err := p.zoteroDB.GetItemsWithPDF(1)
 		if err != nil {
 			errors = append(errors, fmt.Errorf("ItemID %d: %w", itemID, err))
@@ -112,23 +117,32 @@ func (p *PDFParser) BatchParseDocuments(ctx context.Context, itemIDs []int) ([]*
 			continue
 		}
 
-		// 这里需要从数据库获取实际的PDF路径
-		// 暂时跳过，因为我们需要先实现PDF路径查找
-		log.Printf("ItemID %d: PDF路径查找功能待实现", itemID)
+		// 使用找到的文献进行解析
+		item := items[0]
+		if item.PDFPath == "" {
+			errors = append(errors, fmt.Errorf("ItemID %d: PDF路径为空", itemID))
+			continue
+		}
 
-		// TODO: 实现PDF路径查找后启用解析
-		/*
-			doc, err := p.ParseDocument(ctx, itemID, "")
-			if err != nil {
-				errors = append(errors, fmt.Errorf("ItemID %d: %w", itemID, err))
-				continue
-			}
+		// 验证PDF文件存在
+		if _, err := os.Stat(item.PDFPath); err != nil {
+			errors = append(errors, fmt.Errorf("ItemID %d: PDF文件不存在: %s", itemID, item.PDFPath))
+			continue
+		}
 
-			results = append(results, doc)
+		log.Printf("开始解析第 %d/%d 篇文档: %s", i+1, len(itemIDs), item.Title)
 
-			// 显示进度
-			log.Printf("Progress: %d/%d completed", i+1, len(itemIDs))
-		*/
+		// 调用实际解析
+		doc, err := p.ParseDocument(ctx, item.ItemID, item.PDFPath)
+		if err != nil {
+			errors = append(errors, fmt.Errorf("ItemID %d: 解析失败: %w", itemID, err))
+			continue
+		}
+
+		results = append(results, doc)
+
+		// 显示进度
+		log.Printf("进度: %d/%d 完成", i+1, len(itemIDs))
 	}
 
 	if len(errors) > 0 {
@@ -138,6 +152,7 @@ func (p *PDFParser) BatchParseDocuments(ctx context.Context, itemIDs []int) ([]*
 		}
 	}
 
+	log.Printf("批量解析完成，成功解析 %d 篇文档", len(results))
 	return results, nil
 }
 
