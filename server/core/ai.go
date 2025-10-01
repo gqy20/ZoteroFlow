@@ -16,24 +16,24 @@ import (
 
 // Conversation 对话结构
 type Conversation struct {
-	ID        string         `json:"id"`
-	Messages  []ChatMessage  `json:"messages"`
+	ID        string           `json:"id"`
+	Messages  []ChatMessage    `json:"messages"`
 	Context   *DocumentContext `json:"context,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 }
 
 // ChatMessage 聊天消息
 type ChatMessage struct {
-	Role      string    `json:"role"`      // user, assistant, system
-	Content   string    `json:"content"`
-	Timestamp time.Time `json:"timestamp"`
+	Role      string           `json:"role"` // user, assistant, system
+	Content   string           `json:"content"`
+	Timestamp time.Time        `json:"timestamp"`
 	Metadata  *MessageMetadata `json:"metadata,omitempty"`
 }
 
 // MessageMetadata 消息元数据
 type MessageMetadata struct {
-	DocumentIDs []int `json:"document_ids,omitempty"` // 关联的文献ID
+	DocumentIDs []int  `json:"document_ids,omitempty"` // 关联的文献ID
 	QueryType   string `json:"query_type,omitempty"`   // search, analysis, summary
 }
 
@@ -46,21 +46,21 @@ type DocumentContext struct {
 
 // DocumentSummary 文档摘要
 type DocumentSummary struct {
-	ID       int    `json:"id"`
-	Title    string `json:"title"`
-	Authors  string `json:"authors"`
-	Abstract string `json:"abstract"`
+	ID       int      `json:"id"`
+	Title    string   `json:"title"`
+	Authors  string   `json:"authors"`
+	Abstract string   `json:"abstract"`
 	Keywords []string `json:"keywords"`
 }
 
 // AIRequest AI 请求结构
 type AIRequest struct {
-	Model       string                 `json:"model"`
-	Messages    []ChatMessage         `json:"messages"`
-	Stream      bool                   `json:"stream,omitempty"`
-	Temperature float64                `json:"temperature,omitempty"`
-	MaxTokens   int                    `json:"max_tokens,omitempty"`
-	TopP        float64                `json:"top_p,omitempty"`
+	Model       string        `json:"model"`
+	Messages    []ChatMessage `json:"messages"`
+	Stream      bool          `json:"stream,omitempty"`
+	Temperature float64       `json:"temperature,omitempty"`
+	MaxTokens   int           `json:"max_tokens,omitempty"`
+	TopP        float64       `json:"top_p,omitempty"`
 }
 
 // AIResponse AI 响应结构
@@ -75,10 +75,10 @@ type AIResponse struct {
 
 // Choice 选择项
 type Choice struct {
-	Index        int             `json:"index"`
-	Message      ChatMessage     `json:"message"`
-	FinishReason string          `json:"finish_reason"`
-	Delta        *MessageDelta   `json:"delta,omitempty"`
+	Index        int           `json:"index"`
+	Message      ChatMessage   `json:"message"`
+	FinishReason string        `json:"finish_reason"`
+	Delta        *MessageDelta `json:"delta,omitempty"`
 }
 
 // MessageDelta 流式响应增量
@@ -280,8 +280,8 @@ func (c *GLMClient) ChatStream(ctx context.Context, req *AIRequest) (<-chan *Cho
 
 // AIConversationManager AI 对话管理器
 type AIConversationManager struct {
-	client       AIClient
-	zoteroDB     *ZoteroDB
+	client        AIClient
+	zoteroDB      *ZoteroDB
 	conversations map[string]*Conversation
 }
 
@@ -506,7 +506,7 @@ func extractAbstractFromContent(content string) string {
 
 		if inAbstract {
 			if strings.HasPrefix(line, "关键词") || strings.HasPrefix(line, "Key words") ||
-			   strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "# ") {
+				strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "# ") {
 				break
 			}
 			if abstract.Len() > 0 {
