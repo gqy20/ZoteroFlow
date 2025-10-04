@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "article-mcp": {
+      "enabled": true,
+      "command": "uvx",
+      "args": ["article-mcp", "server"],
+      "timeout": 30,
+      "retryAttempts": 3,
+      "description": "Article MCP - 学术文献搜索服务器",
+      "tools": [
+        "search_europe_pmc",
+        "search_arxiv_papers",
+        "get_article_details",
+        "get_references_by_doi",
+        "get_similar_articles",
+        "get_literature_relations",
+        "evaluate_articles_quality"
+      ]
+    },
+    "context7": {
+      "enabled": false,
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "timeout": 20,
+      "retryAttempts": 2,
+      "description": "Context7 - 编程文档和代码示例搜索",
+      "tools": [
+        "get_library_docs",
+        "resolve_library_id"
+      ]
+    }
+  },
+  "globalSettings": {
+    "defaultTimeout": 30,
+    "maxRetryAttempts": 3,
+    "enableLogging": true,
+    "logLevel": "info"
+  }
+}

@@ -61,8 +61,12 @@ func handleCommand(args []string) {
 				chatWithAI(strings.Join(args[1:], " "))
 			}
 		}
+	case "mcp":
+		runMCPServer()
 	case "test-extract":
 		testExtraction()
+	case "related":
+		handleRelatedLiterature(args[1:])
 	case "help":
 		showHelp()
 	default:
@@ -86,8 +90,12 @@ func showHelp() {
 	fmt.Println("  chat <问题>             - 单次AI问答")
 	fmt.Println("  chat --doc=文献名 <问题> - 基于指定文献的AI对话")
 	fmt.Println()
+	fmt.Println("🔍 智能文献分析:")
+	fmt.Println("  related <文献名/DOI> <问题> - 查找相关文献并AI分析")
+	fmt.Println()
 	fmt.Println("🔧 维护命令:")
 	fmt.Println("  clean                   - 清理重复/损坏文件")
+	fmt.Println("  mcp                     - 启动MCP服务器模式")
 	fmt.Println("  help                    - 显示此帮助信息")
 	fmt.Println()
 	fmt.Println("💡 使用示例:")
@@ -95,6 +103,9 @@ func showHelp() {
 	fmt.Println("  ./zoteroflow2 search \"机器学习\"                      # 搜索文献")
 	fmt.Println("  ./zoteroflow2 chat \"什么是深度学习？\"                # AI问答")
 	fmt.Println("  ./zoteroflow2 chat --doc=基因组 \"介绍一下CRISPR\"        # 基于文献的AI对话")
+	fmt.Println("  ./zoteroflow2 related \"机器学习教程\" \"这篇论文的主要贡献是什么？\" # 智能文献分析")
+	fmt.Println("  ./zoteroflow2 related \"10.1038/nature12373\" \"找到相似的研究\" # 相关文献查找")
+	fmt.Println("  ./zoteroflow2 mcp                                     # 启动MCP服务器")
 	fmt.Println()
 	fmt.Println("🎯 AI功能特性:")
 	fmt.Println("  • 支持学术文献分析和解释")
@@ -802,4 +813,14 @@ func testExtraction() {
 			}
 		}
 	}
+}
+
+// runMCPServer 启动MCP服务器模式
+func runMCPServer() {
+	// TODO: 重新实现基于MCPManager的服务器模式
+	log.Printf("MCP服务器模式暂未实现")
+	log.Printf("请使用CLI命令进行文献管理，如：")
+	log.Printf("  ./zoteroflow2 list")
+	log.Printf("  ./zoteroflow2 search <关键词>")
+	log.Printf("  ./zoteroflow2 related <文献> [问题]")
 }
