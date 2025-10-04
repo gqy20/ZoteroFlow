@@ -13,6 +13,7 @@ import (
 
 	"zoteroflow2-server/config"
 	"zoteroflow2-server/core"
+	"zoteroflow2-server/mcp"
 )
 
 func main() {
@@ -66,7 +67,7 @@ func handleCommand(args []string) {
 	case "test-extract":
 		testExtraction()
 	case "related":
-		handleRelatedLiterature(args[1:])
+		mcp.HandleRelatedLiterature(args[1:])
 	case "help":
 		showHelp()
 	default:
@@ -613,14 +614,14 @@ func findDocumentContext(docName string) (*core.DocumentContext, error) {
 	}, nil
 }
 
-// chatWithAI 单次AI对话
+// chatWithAI 单次AI对话（优化版）
 func chatWithAI(message string) {
 	if strings.TrimSpace(message) == "" {
 		fmt.Println("❌ 请输入有效的消息内容")
 		return
 	}
 
-	fmt.Printf("🤖 正在向AI发送问题: %s\n", message)
+	fmt.Printf("🤖 正在分析您的问题: %s\n", message)
 
 	// 加载配置
 	cfg, err := config.Load()
@@ -639,7 +640,74 @@ func chatWithAI(message string) {
 	// 创建AI客户端
 	client := core.NewGLMClient(cfg.AIAPIKey, cfg.AIBaseURL, cfg.AIModel)
 
-	// 创建对话请求
+	// 创建AI-MCP桥接器
+	aiMCPBridge := mcp.NewAIMCPBridge(client, cfg)
+	defer aiMCPBridge.Close()
+
+	// 记录开始时间
+	startTime := time.Now()
+
+	// 让AI选择并调用工具
+	fmt.Printf("🧠 AI正在分析并选择合适的工具...\n")
+	toolCall, aiResponse, err := aiMCPBridge.SelectTool(message)
+	if err != nil {
+		fmt.Printf("❌ AI工具选择失败: %v\n", err)
+		fmt.Printf("💡 降级到普通AI对话...\n")
+		callAIWithoutTools(client, message)
+		return
+	}
+
+	var finalResponse string
+	if toolCall != nil {
+		// 调用MCP工具
+		fmt.Printf("🔧 正在调用工具: %s (来自 %s)\n", toolCall.Tool, toolCall.Server)
+
+		response, err := aiMCPBridge.CallTool(toolCall)
+		if err != nil {
+			fmt.Printf("❌ 工具调用失败: %v\n", err)
+			fmt.Printf("💡 可能的原因:\n")
+			fmt.Printf("   - MCP服务器启动失败\n")
+			fmt.Printf("   - 网络连接问题\n")
+			fmt.Printf("   - 工具参数格式错误\n")
+			fmt.Printf("💡 降级到普通AI对话...\n")
+			callAIWithoutTools(client, message)
+			return
+		}
+
+		fmt.Printf("✅ 工具调用成功，正在生成回答...\n")
+
+		// 解析工具结果
+		toolResult := aiMCPBridge.ParseToolResult(response)
+
+		// 生成最终答案
+		finalResponse = aiMCPBridge.GenerateFinalAnswer(&message, &toolResult, aiResponse)
+
+	} else {
+		// 不需要工具，使用AI的直接回复
+		if aiResponse != nil && *aiResponse != "" {
+			finalResponse = *aiResponse
+		} else {
+			fmt.Printf("⚠️ AI未生成回复，降级到普通对话...\n")
+			callAIWithoutTools(client, message)
+			return
+		}
+	}
+
+	// 显示结果
+	totalTime := time.Since(startTime)
+	fmt.Printf("🤖 助手: %s\n", finalResponse)
+	fmt.Printf("⏱️ 总耗时: %v\n", totalTime)
+}
+
+// callAIWithoutTools 不使用MCP工具的普通AI对话
+func callAIWithoutTools(client core.AIClient, message string) {
+	// 加载配置获取模型信息
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("❌ 配置加载失败: %v\n", err)
+		return
+	}
+
 	messages := []core.ChatMessage{
 		{
 			Role:    "system",
@@ -651,11 +719,9 @@ func chatWithAI(message string) {
 		},
 	}
 
-	// 发送请求
 	req := &core.AIRequest{
 		Model:    cfg.AIModel,
 		Messages: messages,
-		// 限制输出长度，避免超时
 		MaxTokens: 500,
 	}
 
