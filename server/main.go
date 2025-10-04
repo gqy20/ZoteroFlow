@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,11 +16,36 @@ import (
 	"zoteroflow2-server/config"
 	"zoteroflow2-server/core"
 	"zoteroflow2-server/mcp"
+	"zoteroflow2-server/web"
 )
 
 func main() {
+	// 命令行参数解析
+	var (
+		webMode = flag.Bool("web", false, "启动Web服务模式")
+		port    = flag.String("port", "9876", "Web服务端口 (默认: 9876)")
+		help    = flag.Bool("help", false, "显示帮助信息")
+		version = flag.Bool("version", false, "显示版本信息")
+	)
+	flag.Parse()
+
+	if *help {
+		showHelp()
+		return
+	}
+
+	if *version {
+		showVersion()
+		return
+	}
+
+	if *webMode {
+		startWebServer(*port)
+		return
+	}
+
+	// CLI模式
 	if len(os.Args) > 1 {
-		// 处理CLI命令
 		handleCommand(os.Args[1:])
 		return
 	}
@@ -103,9 +130,13 @@ func handleCommand(args []string) {
 
 // showHelp 显示帮助信息
 func showHelp() {
-	fmt.Println("ZoteroFlow2 - PDF文献管理工具")
+	fmt.Println("ZoteroFlow2 - 智能文献管理工具 (CLI + Web 双模式)")
 	fmt.Println()
-	fmt.Println("📚 文献管理:")
+	fmt.Println("🌐 Web服务模式:")
+	fmt.Println("  go run main.go -web                   # 启动Web服务 (默认端口9876)")
+	fmt.Println("  go run main.go -web -port=8888        # 指定端口启动Web服务")
+	fmt.Println()
+	fmt.Println("📚 CLI模式 - 文献管理:")
 	fmt.Println("  list                    - 列出所有解析结果")
 	fmt.Println("  open <名称>             - 打开指定文献文件夹")
 	fmt.Println("  search <关键词>         - 按标题搜索并解析文献")
@@ -119,22 +150,29 @@ func showHelp() {
 	fmt.Println("🔍 智能文献分析:")
 	fmt.Println("  related <文献名/DOI> <问题> - 查找相关文献并AI分析")
 	fmt.Println()
-	fmt.Println("🔧 帮助命令:")
+	fmt.Println("🔧 其他命令:")
 	fmt.Println("  help                    - 显示此帮助信息")
+	fmt.Println("  version                 - 显示版本信息")
 	fmt.Println()
-	fmt.Println("💡 使用示例:")
-	fmt.Println("  ./zoteroflow2 list                                    # 列出文献")
-	fmt.Println("  ./zoteroflow2 search \"机器学习\"                      # 搜索文献")
-	fmt.Println("  ./zoteroflow2 chat \"什么是深度学习？\"                # AI问答")
-	fmt.Println("  ./zoteroflow2 chat --doc=基因组 \"介绍一下CRISPR\"        # 基于文献的AI对话")
-	fmt.Println("  ./zoteroflow2 related \"机器学习教程\" \"这篇论文的主要贡献是什么？\" # 智能文献分析")
-	fmt.Println("  ./zoteroflow2 related \"10.1038/nature12373\" \"找到相似的研究\" # 相关文献查找")
+	fmt.Println("💡 Web功能特性:")
+	fmt.Println("  • 智能文献问答界面")
+	fmt.Println("  • PDF在线查看 (浏览器原生 + PDF.js)")
+	fmt.Println("  • 实时AI对话和分析")
+	fmt.Println("  • 响应式设计，支持移动设备")
 	fmt.Println()
-	fmt.Println("🎯 AI功能特性:")
-	fmt.Println("  • 支持学术文献分析和解释")
-	fmt.Println("  • 可基于特定文献内容进行对话")
-	fmt.Println("  • 交互式对话模式支持上下文记忆")
-	fmt.Println("  • 单次问答模式，适合快速查询")
+	fmt.Println("📱 使用示例:")
+	fmt.Println("  go run main.go -web                       # 启动Web服务")
+	fmt.Println("  # 浏览器访问: http://localhost:9876")
+	fmt.Println("  # Web界面支持: 文献搜索、PDF查看、AI问答")
+	fmt.Println()
+	fmt.Println("  go run main.go list                      # CLI列出文献")
+	fmt.Println("  go run main.go search \"机器学习\"          # 搜索文献")
+	fmt.Println()
+	fmt.Println("🎯 双模式优势:")
+	fmt.Println("  • CLI模式: 高效的命令行操作")
+	fmt.Println("  • Web模式: 直观的图形界面")
+	fmt.Println("  • 统一配置: 共享数据库和AI配置")
+	fmt.Println("  • 端口自动检测: 避免冲突 (9876-9976)")
 }
 
 // listResults 列出所有解析结果
@@ -874,4 +912,73 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// startWebServer 启动Web服务
+func startWebServer(port string) {
+	// 检查端口是否可用
+	availablePort := findAvailablePort(port)
+	if availablePort != port {
+		log.Printf("⚠️  端口 %s 已被占用，使用端口 %s", port, availablePort)
+		port = availablePort
+	}
+
+	// 设置路由
+	router := web.SetupRouter()
+
+	// 启动信息
+	log.Printf("🚀 ZoteroFlow Web服务启动成功!")
+	log.Printf("📱 访问地址: http://localhost:%s", port)
+	log.Printf("💡 提示: 确保已配置好Zotero数据库和AI API")
+	log.Printf("📄 PDF支持: 优先使用浏览器原生，降级到PDF.js")
+	log.Printf("🔧 停止服务: Ctrl+C")
+
+	// 启动服务器
+	if err := router.Run(":" + port); err != nil {
+		log.Fatal("❌ 启动Web服务失败:", err)
+	}
+}
+
+// findAvailablePort 查找可用端口
+func findAvailablePort(defaultPort string) string {
+	// 首先检查默认端口
+	if isPortAvailable(defaultPort) {
+		return defaultPort
+	}
+
+	// 如果默认端口不可用，从9876开始查找可用端口
+	for i := 0; i < 100; i++ {
+		testPort := fmt.Sprintf("%d", 9876+i)
+		if isPortAvailable(testPort) {
+			return testPort
+		}
+	}
+
+	// 如果都不可用，使用随机端口
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		log.Printf("⚠️  无法分配端口: %v", err)
+		return "0"
+	}
+	defer listener.Close()
+
+	return fmt.Sprintf("%d", listener.Addr().(*net.TCPAddr).Port)
+}
+
+// isPortAvailable 检查端口是否可用
+func isPortAvailable(port string) bool {
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		return false
+	}
+	listener.Close()
+	return true
+}
+
+// showVersion 显示版本信息
+func showVersion() {
+	fmt.Printf("ZoteroFlow2 - 智能文献管理工具\n")
+	fmt.Printf("版本: v2.1.0\n")
+	fmt.Printf("构建: %s\n", time.Now().Format("2006-01-02"))
+	fmt.Printf("功能: CLI + Web 双模式\n")
 }

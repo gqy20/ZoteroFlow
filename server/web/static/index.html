@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZoteroFlow - AI文献助手</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>ZoteroFlow</h1>
+            <p>AI驱动的智能文献分析</p>
+            <div class="mode-info">
+                <span class="mode-badge">Web模式</span>
+                <span class="version">v2.1.0</span>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="input-section">
+                <div class="input-header">
+                    <h3>智能文献助手</h3>
+                    <p class="input-desc">输入任何关于文献的问题，AI将为您提供专业解答</p>
+                </div>
+                <textarea
+                    id="queryInput"
+                    placeholder="问任何关于文献的问题，比如：&#10;• 搜索机器学习相关的论文&#10;• 分析一下这篇论文的主要贡献&#10;• 查看指定PDF文献&#10;• 总结最近的研究进展&#10;• 什么是Transformer模型？"
+                    rows="4"
+                ></textarea>
+                <button id="askBtn" onclick="askQuestion()">
+                    <span id="btnText">提问</span>
+                    <div id="loading" class="loading" style="display: none;"></div>
+                </button>
+            </div>
+
+            <div id="resultSection" class="result-section" style="display: none;">
+                <div class="result-header">
+                    <h3>AI回答</h3>
+                    <div class="result-actions">
+                        <button onclick="copyResult()" class="copy-btn">复制</button>
+                        <button id="pdfViewBtn" onclick="togglePDFViewer()" class="pdf-btn" style="display: none;">查看PDF</button>
+                    </div>
+                </div>
+                <div id="resultContent" class="result-content"></div>
+
+                <!-- PDF查看器容器 -->
+                <div id="pdfViewerSection" class="pdf-viewer-section" style="display: none;">
+                    <div class="pdf-viewer-header">
+                        <h4>PDF文献查看</h4>
+                        <button onclick="closePDFViewer()" class="close-btn">✕</button>
+                    </div>
+
+                    <!-- 优先使用原生PDF查看器 -->
+                    <iframe id="nativePDFViewer" class="pdf-viewer" style="display: none;"></iframe>
+
+                    <!-- PDF.js降级方案 -->
+                    <div id="pdfjsViewer" class="pdf-viewer" style="display: none;">
+                        <div class="pdf-controls">
+                            <div class="zoom-controls">
+                                <button onclick="zoomOut()" class="zoom-btn">−</button>
+                                <span class="zoom-level">100%</span>
+                                <button onclick="zoomIn()" class="zoom-btn">+</button>
+                            </div>
+                            <div class="page-controls">
+                                <button onclick="prevPage()" class="page-btn">←</button>
+                                <span class="page-info">1 / 1</span>
+                                <button onclick="nextPage()" class="page-btn">→</button>
+                            </div>
+                        </div>
+                        <div class="pdf-canvas-container">
+                            <canvas id="pdfCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-info">
+                <p>📚 ZoteroFlow2 - 智能文献管理工具</p>
+                <p class="footer-links">
+                    <a href="/health" target="_blank">健康检查</a> |
+                    <a href="/api/status" target="_blank">系统状态</a> |
+                    <a href="#" onclick="showHelp()">使用帮助</a>
+                </p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- PDF.js CDN (仅在需要时加载) -->
+    <script id="pdfjsScript" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" style="display: none;"></script>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

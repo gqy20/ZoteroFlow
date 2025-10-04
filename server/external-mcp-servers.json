@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "article-mcp": {
+      "command": "uvx",
+      "args": ["article-mcp", "server"],
+      "env": {}
+    }
+  }
+}
