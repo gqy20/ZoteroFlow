@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "zoteroflow2": {
+      "command": "/home/qy113/workspace/note/zo/ZoteroFlow2/server/bin/zoteroflow2",
+      "args": ["mcp"],
+      "env": {
+        "ZOTERO_DB_PATH": "/home/qy113/workspace/note/zo/zotero_file/zotero.sqlite",
+        "ZOTERO_DATA_DIR": "/home/qy113/workspace/note/zo/articles"
+      }
+    }
+  }
+}

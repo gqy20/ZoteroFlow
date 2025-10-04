@@ -1,0 +1,1539 @@
+openapi: 3.0.3
+info:
+  title: ZoteroFlow2 API
+  description: |
+    ZoteroFlow2 是一个智能文献分析系统，提供文献管理、PDF解析、AI分析等功能。
+    
+    本API文档描述了系统的RESTful接口，包括文献搜索、PDF解析、AI对话等核心功能。
+    
+    主要特性：
+    - Zotero数据库集成
+    - MinerU PDF解析
+    - AI智能分析
+    - MCP协议支持
+    - 批量处理能力
+    
+  version: 1.0.0
+  contact:
+    name: ZoteroFlow2 Team
+    email: support@zoteroflow2.com
+    url: https://zoteroflow2.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: 开发环境服务器
+  - url: https://api.zoteroflow2.com/v1
+    description: 生产环境服务器
+
+paths:
+  /literature:
+    get:
+      summary: 获取文献列表
+      description: 获取系统中所有文献的列表，支持分页和过滤
+      tags:
+        - Literature
+      parameters:
+        - name: page
+          in: query
+          description: 页码
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页记录数
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          description: 搜索关键词
+          required: false
+          schema:
+            type: string
+        - name: has_pdf
+          in: query
+          description: 是否只返回有PDF的文献
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: 成功返回文献列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureListResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /literature/{id}:
+    get:
+      summary: 获取文献详情
+      description: 根据文献ID获取详细的文献信息
+      tags:
+        - Literature
+      parameters:
+        - name: id
+          in: path
+          description: 文献ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功返回文献详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiteratureDetailResponse'
+        '404':
+          description: 文献不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /literature/search:
+    post:
+      summary: 搜索文献
+      description: 根据搜索条件搜索文献
+      tags:
+        - Literature
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: 搜索成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pdf/parse:
+    post:
+      summary: 解析PDF文件
+      description: 上传并解析PDF文件，提取结构化内容
+      tags:
+        - PDF
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF文件
+                options:
+                  type: object
+                  properties:
+                    language:
+                      type: string
+                      description: 处理语言
+                      default: ch
+                    ocr:
+                      type: boolean
+                      description: 是否启用OCR
+                      default: true
+      responses:
+        '200':
+          description: 解析成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParseResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: 文件过大
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pdf/parse/{taskId}:
+    get:
+      summary: 获取解析状态
+      description: 根据任务ID获取PDF解析的状态和结果
+      tags:
+        - PDF
+      parameters:
+        - name: taskId
+          in: path
+          description: 任务ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功返回解析状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ParseStatusResponse'
+        '404':
+          description: 任务不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ai/chat:
+    post:
+      summary: AI对话
+      description: 与AI助手进行对话，支持文献分析和问答
+      tags:
+        - AI
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: 对话成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: API调用频率超限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ai/conversations:
+    get:
+      summary: 获取对话列表
+      description: 获取用户的对话历史列表
+      tags:
+        - AI
+      parameters:
+        - name: page
+          in: query
+          description: 页码
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: 每页记录数
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: 成功返回对话列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationListResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ai/conversations/{id}:
+    get:
+      summary: 获取对话详情
+      description: 根据对话ID获取对话的详细信息和消息历史
+      tags:
+        - AI
+      parameters:
+        - name: id
+          in: path
+          description: 对话ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 成功返回对话详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConversationDetailResponse'
+        '404':
+          description: 对话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ai/conversations/{id}/continue:
+    post:
+      summary: 继续对话
+      description: 在现有对话中继续对话
+      tags:
+        - AI
+      parameters:
+        - name: id
+          in: path
+          description: 对话ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContinueChatRequest'
+      responses:
+        '200':
+          description: 对话继续成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 对话不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mcp/tools:
+    get:
+      summary: 获取MCP工具列表
+      description: 获取可用的MCP工具列表
+      tags:
+        - MCP
+      responses:
+        '200':
+          description: 成功返回工具列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPToolsResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mcp/tools/{toolName}/call:
+    post:
+      summary: 调用MCP工具
+      description: 调用指定的MCP工具执行操作
+      tags:
+        - MCP
+      parameters:
+        - name: toolName
+          in: path
+          description: 工具名称
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPCallRequest'
+      responses:
+        '200':
+          description: 工具调用成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MCPCallResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 工具不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      summary: 健康检查
+      description: 检查系统健康状态
+      tags:
+        - System
+      responses:
+        '200':
+          description: 系统健康
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: 系统不健康
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /stats:
+    get:
+      summary: 获取系统统计
+      description: 获取系统使用统计信息
+      tags:
+        - System
+      responses:
+        '200':
+          description: 成功返回统计信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+        '500':
+          description: 服务器内部错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    # 基础响应结构
+    BaseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          description: 请求是否成功
+        message:
+          type: string
+          description: 响应消息
+        timestamp:
+          type: string
+          format: date-time
+          description: 响应时间
+      required:
+        - success
+        - message
+        - timestamp
+
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: 错误代码
+            message:
+              type: string
+              description: 错误消息
+            details:
+              type: object
+              description: 错误详情
+          required:
+            - code
+            - message
+      required:
+        - error
+
+    # 文献相关结构
+    LiteratureItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 文献ID
+        title:
+          type: string
+          description: 文献标题
+        authors:
+          type: array
+          items:
+            type: string
+          description: 作者列表
+        year:
+          type: integer
+          description: 发表年份
+        journal:
+          type: string
+          description: 期刊名称
+        doi:
+          type: string
+          description: DOI标识符
+        abstract:
+          type: string
+          description: 摘要
+        keywords:
+          type: array
+          items:
+            type: string
+          description: 关键词列表
+        has_pdf:
+          type: boolean
+          description: 是否有PDF附件
+        pdf_path:
+          type: string
+          description: PDF文件路径
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+      required:
+        - id
+        - title
+        - authors
+        - created_at
+        - updated_at
+
+    LiteratureListResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/LiteratureItem'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+          required:
+            - items
+            - pagination
+      required:
+        - data
+
+    LiteratureDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            item:
+              $ref: '#/components/schemas/LiteratureItem'
+            related_items:
+              type: array
+              items:
+                $ref: '#/components/schemas/LiteratureItem'
+              description: 相关文献
+          metrics:
+              type: object
+              properties:
+                citation_count:
+                  type: integer
+                  description: 引用次数
+                download_count:
+                  type: integer
+                  description: 下载次数
+                view_count:
+                  type: integer
+                  description: 查看次数
+              description: 文献指标
+          required:
+            - item
+      required:
+        - data
+
+    SearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: 搜索查询
+        filters:
+          type: object
+          properties:
+            authors:
+              type: array
+              items:
+                type: string
+              description: 作者过滤
+            year_from:
+              type: integer
+              description: 起始年份
+            year_to:
+              type: integer
+              description: 结束年份
+            journal:
+              type: string
+              description: 期刊过滤
+            has_pdf:
+              type: boolean
+              description: 是否有PDF
+          description: 搜索过滤器
+        sort:
+          type: object
+          properties:
+            field:
+              type: string
+              enum: [title, year, journal, created_at]
+              description: 排序字段
+            order:
+              type: string
+              enum: [asc, desc]
+              description: 排序方向
+          description: 排序设置
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - query
+
+    SearchResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/LiteratureItem'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+            total:
+              type: integer
+              description: 总结果数
+            search_time:
+              type: number
+              format: float
+              description: 搜索耗时（秒）
+          required:
+            - items
+            - pagination
+            - total
+      required:
+        - data
+
+    # PDF解析相关结构
+    ParseRequest:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+          description: PDF文件
+        options:
+          type: object
+          properties:
+            language:
+              type: string
+              description: 处理语言
+              default: ch
+            ocr:
+              type: boolean
+              description: 是否启用OCR
+              default: true
+            extract_images:
+              type: boolean
+              description: 是否提取图片
+              default: true
+            extract_tables:
+              type: boolean
+              description: 是否提取表格
+              default: true
+          description: 解析选项
+      required:
+        - file
+
+    ParseResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            task_id:
+              type: string
+              format: uuid
+              description: 任务ID
+            status:
+              type: string
+              enum: [pending, processing, completed, failed]
+              description: 解析状态
+            progress:
+              type: integer
+              minimum: 0
+              maximum: 100
+              description: 解析进度百分比
+            result:
+              $ref: '#/components/schemas/ParseResult'
+            error:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: 错误代码
+                message:
+                  type: string
+                  description: 错误消息
+              description: 错误信息
+          required:
+            - task_id
+            - status
+      required:
+        - data
+
+    ParseResult:
+      type: object
+      properties:
+        content:
+          type: string
+          description: 解析后的内容（Markdown格式）
+        metadata:
+          type: object
+          properties:
+            title:
+              type: string
+              description: 文档标题
+            authors:
+              type: array
+              items:
+                type: string
+              description: 作者列表
+            pages:
+              type: integer
+              description: 页数
+            language:
+              type: string
+              description: 文档语言
+          description: 文档元数据
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [image, table, text]
+                description: 文件类型
+              name:
+                type: string
+                description: 文件名
+              path:
+                type: string
+                description: 文件路径
+              size:
+                type: integer
+                description: 文件大小（字节）
+            description: 解析出的文件列表
+        duration:
+          type: number
+          format: float
+          description: 解析耗时（秒）
+      required:
+        - content
+        - metadata
+
+    ParseStatusResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            task_id:
+              type: string
+              format: uuid
+              description: 任务ID
+            status:
+              type: string
+              enum: [pending, processing, completed, failed]
+              description: 解析状态
+            progress:
+              type: integer
+              minimum: 0
+              maximum: 100
+              description: 解析进度百分比
+            result:
+              $ref: '#/components/schemas/ParseResult'
+            error:
+              type: object
+              properties:
+                code:
+                  type: string
+                  description: 错误代码
+                message:
+                  type: string
+                  description: 错误消息
+              description: 错误信息
+            created_at:
+              type: string
+              format: date-time
+              description: 创建时间
+            updated_at:
+              type: string
+              format: date-time
+              description: 更新时间
+          required:
+            - task_id
+            - status
+            - created_at
+            - updated_at
+      required:
+        - data
+
+    # AI对话相关结构
+    ChatMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          description: 消息角色
+        content:
+          type: string
+          description: 消息内容
+        timestamp:
+          type: string
+          format: date-time
+          description: 消息时间
+        metadata:
+          type: object
+          properties:
+            document_ids:
+              type: array
+              items:
+                type: integer
+              description: 关联的文献ID
+            query_type:
+              type: string
+              enum: [search, analysis, summary]
+              description: 查询类型
+          description: 消息元数据
+      required:
+        - role
+        - content
+        - timestamp
+
+    ChatRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          description: 用户消息
+        conversation_id:
+          type: string
+          format: uuid
+          description: 对话ID（可选，用于继续对话）
+        context:
+          type: object
+          properties:
+            document_ids:
+              type: array
+              items:
+                type: integer
+              description: 关联的文献ID
+            query_type:
+              type: string
+              enum: [search, analysis, summary]
+              description: 查询类型
+          description: 对话上下文
+        options:
+          type: object
+          properties:
+            model:
+              type: string
+              description: AI模型
+              default: glm-4.6
+            temperature:
+              type: number
+              minimum: 0
+              maximum: 2
+              default: 0.7
+              description: 温度参数
+            max_tokens:
+              type: integer
+              minimum: 1
+              maximum: 4000
+              default: 2000
+              description: 最大Token数
+          description: 对话选项
+      required:
+        - message
+
+    ChatResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            conversation_id:
+              type: string
+              format: uuid
+              description: 对话ID
+            message:
+              $ref: '#/components/schemas/ChatMessage'
+            usage:
+              type: object
+              properties:
+                prompt_tokens:
+                  type: integer
+                  description: 输入Token数
+                completion_tokens:
+                  type: integer
+                  description: 输出Token数
+                total_tokens:
+                  type: integer
+                  description: 总Token数
+              description: Token使用情况
+          required:
+            - conversation_id
+            - message
+            - usage
+      required:
+        - data
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: 对话ID
+        title:
+          type: string
+          description: 对话标题
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          description: 消息列表
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+      required:
+        - id
+        - messages
+        - created_at
+        - updated_at
+
+    ConversationListResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            conversations:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+          required:
+            - conversations
+            - pagination
+      required:
+        - data
+
+    ConversationDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            conversation:
+              $ref: '#/components/schemas/Conversation'
+          required:
+            - conversation
+      required:
+        - data
+
+    ContinueChatRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          description: 用户消息
+        options:
+          type: object
+          properties:
+            model:
+              type: string
+              description: AI模型
+            temperature:
+              type: number
+              minimum: 0
+              maximum: 2
+              description: 温度参数
+            max_tokens:
+              type: integer
+              minimum: 1
+              maximum: 4000
+              description: 最大Token数
+          description: 对话选项
+      required:
+        - message
+
+    # MCP相关结构
+    MCPTool:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 工具名称
+        description:
+          type: string
+          description: 工具描述
+        input_schema:
+          type: object
+          description: 输入参数模式（JSON Schema）
+      required:
+        - name
+        - description
+        - input_schema
+
+    MCPToolsResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            tools:
+              type: array
+              items:
+                $ref: '#/components/schemas/MCPTool'
+          required:
+            - tools
+      required:
+        - data
+
+    MCPCallRequest:
+      type: object
+      properties:
+        arguments:
+          type: object
+          description: 工具参数
+          additionalProperties: true
+        options:
+          type: object
+          properties:
+            timeout:
+              type: integer
+              description: 超时时间（秒）
+              default: 30
+          description: 调用选项
+      required:
+        - arguments
+
+    MCPCallResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            result:
+              type: object
+              description: 工具执行结果
+            content:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    enum: [text, image, resource]
+                    description: 内容类型
+                  text:
+                    type: string
+                    description: 文本内容
+                  data:
+                    type: object
+                    description: 数据内容
+                  mime_type:
+                    type: string
+                    description: MIME类型
+                  uri:
+                    type: string
+                    description: 资源URI
+                description: 工具输出内容
+            duration:
+              type: number
+              format: float
+              description: 执行耗时（秒）
+          required:
+            - result
+            - content
+      required:
+        - data
+
+    # 系统相关结构
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: 当前页码
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: 每页记录数
+        total:
+          type: integer
+          description: 总记录数
+        total_pages:
+          type: integer
+          description: 总页数
+        has_next:
+          type: boolean
+          description: 是否有下一页
+        has_prev:
+          type: boolean
+          description: 是否有上一页
+      required:
+        - page
+        - limit
+        - total
+        - total_pages
+
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [healthy, unhealthy]
+              description: 系统状态
+            version:
+              type: string
+              description: 系统版本
+            uptime:
+              type: number
+              format: float
+              description: 运行时间（秒）
+            services:
+              type: object
+              properties:
+                database:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [up, down]
+                      description: 数据库状态
+                    response_time:
+                      type: number
+                      format: float
+                      description: 响应时间（毫秒）
+                  description: 数据库服务状态
+                mineru:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [up, down]
+                      description: MinerU服务状态
+                    response_time:
+                      type: number
+                      format: float
+                      description: 响应时间（毫秒）
+                  description: MinerU服务状态
+                ai:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [up, down]
+                      description: AI服务状态
+                    response_time:
+                      type: number
+                      format: float
+                      description: 响应时间（毫秒）
+                  description: AI服务状态
+                mcp:
+                  type: object
+                  properties:
+                    status:
+                      type: string
+                      enum: [up, down]
+                      description: MCP服务状态
+                    response_time:
+                      type: number
+                      format: float
+                      description: 响应时间（毫秒）
+                  description: MCP服务状态
+              description: 服务状态
+          required:
+            - status
+            - version
+            - uptime
+            - services
+      required:
+        - data
+
+    StatsResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+      - type: object
+      properties:
+        data:
+          type: object
+          properties:
+            literature:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  description: 总文献数
+                with_pdf:
+                  type: integer
+                  description: 有PDF的文献数
+                parsed:
+                  type: integer
+                  description: 已解析的文献数
+              description: 文献统计
+            pdf_parsing:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  description: 总解析任务数
+                completed:
+                  type: integer
+                  description: 已完成任务数
+                failed:
+                  type: integer
+                  description: 失败任务数
+                avg_duration:
+                  type: number
+                  format: float
+                  description: 平均解析耗时（秒）
+              description: PDF解析统计
+            ai_chat:
+              type: object
+              properties:
+                total_conversations:
+                  type: integer
+                  description: 总对话数
+                total_messages:
+                  type: integer
+                  description: 总消息数
+                avg_tokens_per_message:
+                  type: number
+                  format: float
+                  description: 平均每条消息Token数
+              description: AI对话统计
+            mcp:
+              type: object
+              properties:
+                total_calls:
+                  type: integer
+                  description: 总MCP调用数
+                successful_calls:
+                  type: integer
+                  description: 成功调用数
+                failed_calls:
+                  type: integer
+                  description: 失败调用数
+                avg_response_time:
+                  type: number
+                  format: float
+                  description: 平均响应时间（秒）
+              description: MCP调用统计
+            system:
+              type: object
+              properties:
+                requests_per_minute:
+                  type: number
+                  format: float
+                  description: 每分钟请求数
+                avg_response_time:
+                  type: number
+                  format: float
+                  description: 平均响应时间（毫秒）
+                error_rate:
+                  type: number
+                  format: float
+                  description: 错误率（百分比）
+              description: 系统统计
+          required:
+            - literature
+            - pdf_parsing
+            - ai_chat
+            - mcp
+            - system
+      required:
+        - data
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT认证
+
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      description: 页码
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    LimitParam:
+      in: query
+      name: limit
+      description: 每页记录数
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    SearchParam:
+      in: query
+      name: search
+      description: 搜索关键词
+      required: false
+      schema:
+        type: string
+
+    IdParam:
+      in: path
+      name: id
+      description: 资源ID
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+    TaskIdParam:
+      in: path
+      name: taskId
+      description: 任务ID
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ConversationIdParam:
+      in: path
+      name: id
+      description: 对话ID
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    ToolNameParam:
+      in: path
+      name: toolName
+      description: 工具名称
+      required: true
+      schema:
+        type: string
+
+  tags:
+    - name: Literature
+      description: 文献管理相关接口
+    - name: PDF
+      description: PDF解析相关接口
+    - name: AI
+      description: AI对话相关接口
+    - name: MCP
+      description: MCP协议相关接口
+    - name: System
+      description: 系统相关接口
+
+# 示例
+examples:
+  LiteratureSearch:
+    summary: 搜索文献
+    description: 根据关键词搜索文献
+    value:
+      summary: 搜索机器学习相关文献
+      description: 搜索包含"机器学习"关键词的文献
+      externalValue: 'https://api.zoteroflow2.com/v1/literature/search'
+    parameters:
+      query: "机器学习"
+      filters:
+        year_from: 2020
+        has_pdf: true
+      sort:
+        field: "year"
+        order: "desc"
+      pagination:
+        page: 1
+        limit: 10
+
+  PDFParse:
+    summary: 解析PDF文件
+    description: 上传并解析PDF文件
+    value:
+      summary: 解析学术论文PDF
+      description: 解析一篇机器学习相关的学术论文PDF
+      externalValue: 'https://api.zoteroflow2.com/v1/pdf/parse'
+    parameters:
+      file: <binary>
+      options:
+        language: "ch"
+        ocr: true
+        extract_images: true
+
+  AIChat:
+    summary: AI对话
+    description: 与AI助手进行对话
+    value:
+      summary: 询问机器学习相关问题
+      description: 向AI助手询问机器学习的基本概念
+      externalValue: 'https://api.zoteroflow2.com/v1/ai/chat'
+    parameters:
+      message: "什么是机器学习？"
+      options:
+        model: "glm-4.6"
+        temperature: 0.7
+        max_tokens: 1000
