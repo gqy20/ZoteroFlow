@@ -22,6 +22,7 @@ type MinerUClient struct {
 	HTTPClient *http.Client
 	MaxRetry   int
 	Timeout    time.Duration
+	ResultsDir string // 解析结果存储目录
 }
 
 // FileInfo 文件信息
@@ -95,12 +96,18 @@ type ParseRecord struct {
 
 // NewMinerUClient 创建MinerU客户端
 func NewMinerUClient(apiURL, token string) *MinerUClient {
+	return NewMinerUClientWithResultsDir(apiURL, token, "data/results")
+}
+
+// NewMinerUClientWithResultsDir 创建MinerU客户端，指定结果目录
+func NewMinerUClientWithResultsDir(apiURL, token, resultsDir string) *MinerUClient {
 	return &MinerUClient{
 		BaseURL:    apiURL,
 		Token:      token,
 		HTTPClient: &http.Client{Timeout: 120 * time.Second},
 		MaxRetry:   3,
 		Timeout:    3 * time.Minute,
+		ResultsDir: resultsDir,
 	}
 }
 
@@ -198,8 +205,7 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 
 	// 4. 下载结果到配置的结果目录
 	log.Printf("步骤4: 下载解析结果")
-	resultsDir := "data/results" // TODO: 从配置读取
-	zipPath := filepath.Join(resultsDir, fileName+".zip")
+	zipPath := filepath.Join(c.ResultsDir, fileName+".zip")
 	if err := c.downloadResult(ctx, resultURL, zipPath); err != nil {
 		// 记录失败
 		duration := time.Since(startTime).Milliseconds()

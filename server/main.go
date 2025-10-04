@@ -27,6 +27,37 @@ func main() {
 	runBasicTest()
 }
 
+// loadConfigWithCheck 加载配置并进行错误检查的公共函数
+func loadConfigWithCheck() *config.Config {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Printf("配置加载失败: %v", err)
+		return nil
+	}
+	return cfg
+}
+
+// createClients 根据配置创建AI和Zotero客户端的公共函数
+func createClients(cfg *config.Config) (*core.ZoteroDB, core.AIClient, error) {
+	if cfg == nil {
+		return nil, nil, fmt.Errorf("配置为空")
+	}
+
+	// 连接Zotero数据库
+	zoteroDB, err := core.NewZoteroDB(cfg.ZoteroDBPath, cfg.ZoteroDataDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("连接Zotero数据库失败: %w", err)
+	}
+
+	// 检查是否需要AI客户端
+	var aiClient core.AIClient
+	if cfg.AIAPIKey != "" {
+		aiClient = core.NewGLMClient(cfg.AIAPIKey, cfg.AIBaseURL, cfg.AIModel)
+	}
+
+	return zoteroDB, aiClient, nil
+}
+
 // handleCommand 处理CLI命令
 func handleCommand(args []string) {
 	switch args[0] {
@@ -47,8 +78,6 @@ func handleCommand(args []string) {
 			log.Fatal("用法: doi <DOI号>")
 		}
 		searchAndParse(args[1], "doi")
-	case "clean":
-		cleanResults()
 	case "chat":
 		if len(args) < 2 {
 			startInteractiveChat()
@@ -62,10 +91,6 @@ func handleCommand(args []string) {
 				chatWithAI(strings.Join(args[1:], " "))
 			}
 		}
-	case "mcp":
-		runMCPServer()
-	case "test-extract":
-		testExtraction()
 	case "related":
 		mcp.HandleRelatedLiterature(args[1:])
 	case "help":
@@ -94,9 +119,7 @@ func showHelp() {
 	fmt.Println("🔍 智能文献分析:")
 	fmt.Println("  related <文献名/DOI> <问题> - 查找相关文献并AI分析")
 	fmt.Println()
-	fmt.Println("🔧 维护命令:")
-	fmt.Println("  clean                   - 清理重复/损坏文件")
-	fmt.Println("  mcp                     - 启动MCP服务器模式")
+	fmt.Println("🔧 帮助命令:")
 	fmt.Println("  help                    - 显示此帮助信息")
 	fmt.Println()
 	fmt.Println("💡 使用示例:")
@@ -106,7 +129,6 @@ func showHelp() {
 	fmt.Println("  ./zoteroflow2 chat --doc=基因组 \"介绍一下CRISPR\"        # 基于文献的AI对话")
 	fmt.Println("  ./zoteroflow2 related \"机器学习教程\" \"这篇论文的主要贡献是什么？\" # 智能文献分析")
 	fmt.Println("  ./zoteroflow2 related \"10.1038/nature12373\" \"找到相似的研究\" # 相关文献查找")
-	fmt.Println("  ./zoteroflow2 mcp                                     # 启动MCP服务器")
 	fmt.Println()
 	fmt.Println("🎯 AI功能特性:")
 	fmt.Println("  • 支持学术文献分析和解释")
@@ -117,9 +139,8 @@ func showHelp() {
 
 // listResults 列出所有解析结果
 func listResults() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Printf("配置加载失败: %v", err)
+	cfg := loadConfigWithCheck()
+	if cfg == nil {
 		return
 	}
 
@@ -150,9 +171,8 @@ func listResults() {
 
 // openResult 打开指定文献
 func openResult(name string) {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Printf("配置加载失败: %v", err)
+	cfg := loadConfigWithCheck()
+	if cfg == nil {
 		return
 	}
 
@@ -198,12 +218,6 @@ func listFiles(folderPath string) {
 	}
 }
 
-// cleanResults 清理重复和损坏文件
-func cleanResults() {
-	fmt.Println("清理功能待实现")
-	// TODO: 实现清理逻辑
-}
-
 // readMeta 读取元数据文件
 func readMeta(metaFile string) *core.ParsedFileInfo {
 	data, err := os.ReadFile(metaFile)
@@ -224,9 +238,9 @@ func runBasicTest() {
 	log.Println("=== ZoteroFlow2 MinerU Integration Test ===")
 
 	// 1. 加载配置
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("配置加载失败: %v", err)
+	cfg := loadConfigWithCheck()
+	if cfg == nil {
+		return
 	}
 
 	log.Printf("Zotero数据库路径: %s", cfg.ZoteroDBPath)
@@ -234,25 +248,25 @@ func runBasicTest() {
 	log.Printf("MinerU API URL: %s", cfg.MineruAPIURL)
 	log.Printf("缓存目录: %s", cfg.CacheDir)
 
-	// 2. 连接Zotero数据库
-	zoteroDB, err := core.NewZoteroDB(cfg.ZoteroDBPath, cfg.ZoteroDataDir)
+	// 连接Zotero数据库
+	zoteroDB, _, err := createClients(cfg)
 	if err != nil {
-		log.Fatalf("连接Zotero数据库失败: %v", err)
+		log.Fatalf("创建客户端失败: %v", err)
 	}
 	defer zoteroDB.Close()
 
-	// 3. 创建MinerU客户端
-	mineruClient := core.NewMinerUClient(cfg.MineruAPIURL, cfg.MineruToken)
+	// 创建MinerU客户端
+	mineruClient := core.NewMinerUClientWithResultsDir(cfg.MineruAPIURL, cfg.MineruToken, cfg.ResultsDir)
 	log.Println("MinerU client created successfully")
 
-	// 4. 创建PDF解析器
+	// 创建PDF解析器
 	parser, err := core.NewPDFParser(zoteroDB, mineruClient, cfg.CacheDir)
 	if err != nil {
 		log.Fatalf("创建PDF解析器失败: %v", err)
 	}
 	log.Println("PDF parser created successfully")
 
-	// 5. 测试基础功能
+	// 测试基础功能
 	testBasicFunctions(zoteroDB, mineruClient, parser)
 
 	log.Println("\n=== Test Completed ===")
@@ -260,21 +274,16 @@ func runBasicTest() {
 }
 
 // searchAndParse 搜索并解析文献 - 核心函数
-func searchAndParse(query, searchType string) {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Printf("配置加载失败: %v", err)
-		return
-	}
-
-	if cfg.MineruToken == "" {
-		log.Println("❌ MinerU Token 未配置")
+func searchAndParse(query, _ string) {
+	cfg := loadConfigWithCheck()
+	if cfg == nil || cfg.MineruToken == "" {
+		log.Println("❌ 配置加载失败或MinerU Token 未配置")
 		return
 	}
 
 	// 连接数据库
 	log.Printf("配置数据目录: %s", cfg.ZoteroDataDir)
-	zoteroDB, err := core.NewZoteroDB(cfg.ZoteroDBPath, cfg.ZoteroDataDir)
+	zoteroDB, _, err := createClients(cfg)
 	if err != nil {
 		log.Printf("连接数据库失败: %v", err)
 		return
@@ -336,7 +345,7 @@ func parseDocument(pdfPath string, cfg *config.Config) {
 	}
 
 	// 创建MinerU客户端
-	mineruClient := core.NewMinerUClient(cfg.MineruAPIURL, cfg.MineruToken)
+	mineruClient := core.NewMinerUClientWithResultsDir(cfg.MineruAPIURL, cfg.MineruToken, cfg.ResultsDir)
 
 	log.Println("🚀 开始解析PDF...")
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.MineruTimeout)*time.Second)
@@ -364,7 +373,7 @@ func parseDocument(pdfPath string, cfg *config.Config) {
 	}
 }
 
-func testBasicFunctions(zoteroDB *core.ZoteroDB, mineruClient *core.MinerUClient, parser *core.PDFParser) {
+func testBasicFunctions(zoteroDB *core.ZoteroDB, mineruClient *core.MinerUClient, _ *core.PDFParser) {
 	log.Println("\n=== Testing Basic Functions ===")
 
 	// 测试数据库查询
@@ -389,33 +398,23 @@ func testBasicFunctions(zoteroDB *core.ZoteroDB, mineruClient *core.MinerUClient
 
 // startInteractiveChat 启动交互式AI对话
 func startInteractiveChat() {
-	// 加载配置
-	cfg, err := config.Load()
-	if err != nil {
-		log.Printf("加载配置失败: %v", err)
-		return
-	}
-
-	// 检查AI配置
-	if cfg.AIAPIKey == "" {
+	cfg := loadConfigWithCheck()
+	if cfg == nil || cfg.AIAPIKey == "" {
 		fmt.Println("❌ AI功能未配置，请设置 AI_API_KEY 环境变量")
 		fmt.Println("示例: export AI_API_KEY=your_api_key_here")
 		return
 	}
 
-	// 创建AI客户端
-	client := core.NewGLMClient(cfg.AIAPIKey, cfg.AIBaseURL, cfg.AIModel)
-
-	// 连接Zotero数据库
-	zoteroDB, err := core.NewZoteroDB(cfg.ZoteroDBPath, cfg.ZoteroDataDir)
+	// 创建客户端
+	zoteroDB, aiClient, err := createClients(cfg)
 	if err != nil {
-		log.Printf("连接Zotero数据库失败: %v", err)
+		log.Printf("创建客户端失败: %v", err)
 		return
 	}
 	defer zoteroDB.Close()
 
 	// 创建对话管理器
-	chatManager := core.NewAIConversationManager(client, zoteroDB)
+	chatManager := core.NewAIConversationManager(aiClient, zoteroDB)
 
 	fmt.Println("🤖 ZoteroFlow2 AI学术助手")
 	fmt.Println("输入 'help' 查看帮助，输入 'quit' 或 'exit' 退出")
@@ -500,19 +499,16 @@ func chatWithDocument(docName, message string) {
 		return
 	}
 
-	// 创建AI客户端
-	client := core.NewGLMClient(cfg.AIAPIKey, cfg.AIBaseURL, cfg.AIModel)
-
-	// 连接Zotero数据库
-	zoteroDB, err := core.NewZoteroDB(cfg.ZoteroDBPath, cfg.ZoteroDataDir)
+	// 创建客户端
+	zoteroDB, aiClient, err := createClients(cfg)
 	if err != nil {
-		log.Printf("连接Zotero数据库失败: %v", err)
+		log.Printf("创建客户端失败: %v", err)
 		return
 	}
 	defer zoteroDB.Close()
 
 	// 创建对话管理器
-	chatManager := core.NewAIConversationManager(client, zoteroDB)
+	chatManager := core.NewAIConversationManager(aiClient, zoteroDB)
 
 	// 查找指定的文献
 	docContext, err := findDocumentContext(docName)
@@ -551,9 +547,9 @@ func chatWithDocument(docName, message string) {
 
 // findDocumentContext 查找指定文献的上下文
 func findDocumentContext(docName string) (*core.DocumentContext, error) {
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("配置加载失败: %w", err)
+	cfg := loadConfigWithCheck()
+	if cfg == nil {
+		return nil, fmt.Errorf("配置加载失败")
 	}
 
 	resultsDir := cfg.ResultsDir
@@ -623,25 +619,18 @@ func chatWithAI(message string) {
 
 	fmt.Printf("🤖 正在分析您的问题: %s\n", message)
 
-	// 加载配置
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Printf("❌ 配置加载失败: %v\n", err)
-		return
-	}
-
-	// 检查AI配置
-	if cfg.AIAPIKey == "" {
+	cfg := loadConfigWithCheck()
+	if cfg == nil || cfg.AIAPIKey == "" {
 		fmt.Println("❌ AI功能未配置，请设置 AI_API_KEY 环境变量")
 		fmt.Println("示例: export AI_API_KEY=your_api_key_here")
 		return
 	}
 
 	// 创建AI客户端
-	client := core.NewGLMClient(cfg.AIAPIKey, cfg.AIBaseURL, cfg.AIModel)
+	aiClient := core.NewGLMClient(cfg.AIAPIKey, cfg.AIBaseURL, cfg.AIModel)
 
 	// 创建AI-MCP桥接器
-	aiMCPBridge := mcp.NewAIMCPBridge(client, cfg)
+	aiMCPBridge := mcp.NewAIMCPBridge(aiClient, cfg)
 	defer aiMCPBridge.Close()
 
 	// 记录开始时间
@@ -653,7 +642,7 @@ func chatWithAI(message string) {
 	if err != nil {
 		fmt.Printf("❌ AI工具选择失败: %v\n", err)
 		fmt.Printf("💡 降级到普通AI对话...\n")
-		callAIWithoutTools(client, message)
+		callAIWithoutTools(aiClient, message)
 		return
 	}
 
@@ -670,7 +659,7 @@ func chatWithAI(message string) {
 			fmt.Printf("   - 网络连接问题\n")
 			fmt.Printf("   - 工具参数格式错误\n")
 			fmt.Printf("💡 降级到普通AI对话...\n")
-			callAIWithoutTools(client, message)
+			callAIWithoutTools(aiClient, message)
 			return
 		}
 
@@ -688,7 +677,7 @@ func chatWithAI(message string) {
 			finalResponse = *aiResponse
 		} else {
 			fmt.Printf("⚠️ AI未生成回复，降级到普通对话...\n")
-			callAIWithoutTools(client, message)
+			callAIWithoutTools(aiClient, message)
 			return
 		}
 	}
@@ -700,11 +689,11 @@ func chatWithAI(message string) {
 }
 
 // callAIWithoutTools 不使用MCP工具的普通AI对话
-func callAIWithoutTools(client core.AIClient, message string) {
+func callAIWithoutTools(aiClient core.AIClient, message string) {
 	// 加载配置获取模型信息
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Printf("❌ 配置加载失败: %v\n", err)
+	cfg := loadConfigWithCheck()
+	if cfg == nil {
+		fmt.Printf("❌ 配置加载失败\n")
 		return
 	}
 
@@ -728,7 +717,7 @@ func callAIWithoutTools(client core.AIClient, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.AITimeout)*time.Second)
 	defer cancel()
 
-	response, err := client.Chat(ctx, req)
+	response, err := aiClient.Chat(ctx, req)
 	if err != nil {
 		fmt.Printf("❌ AI响应失败: %v\n", err)
 		fmt.Println("💡 可能的原因:")
@@ -781,25 +770,30 @@ func extractSimpleAbstract(content string) string {
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "摘要：") || strings.HasPrefix(line, "Abstract:") {
-			// 返回摘要的第一部分
-			abstract := strings.TrimPrefix(line, "摘要：")
-			abstract = strings.TrimPrefix(abstract, "Abstract:")
+		var abstract string
+		var ok bool
 
-			// 使用配置的长度限制
-			cfg, err := config.Load()
-			if err == nil {
-				if len(abstract) > cfg.AbstractLength {
-					return abstract[:cfg.AbstractLength] + "..."
-				}
-			} else {
-				// 如果配置加载失败，使用默认值
-				if len(abstract) > 200 {
-					return abstract[:200] + "..."
-				}
-			}
-			return abstract
+		if abstract, ok = strings.CutPrefix(line, "摘要："); ok {
+			// 中文摘要
+		} else if abstract, ok = strings.CutPrefix(line, "Abstract:"); ok {
+			// 英文摘要
+		} else {
+			continue
 		}
+
+		// 使用配置的长度限制
+		cfg := loadConfigWithCheck()
+		if cfg != nil {
+			if len(abstract) > cfg.AbstractLength {
+				return abstract[:cfg.AbstractLength] + "..."
+			}
+		} else {
+			// 如果配置加载失败，使用默认值
+			if len(abstract) > 200 {
+				return abstract[:200] + "..."
+			}
+		}
+		return abstract
 	}
 	return "无摘要信息"
 }
@@ -809,24 +803,30 @@ func extractSimpleKeywords(content string) []string {
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "关键词：") {
-			keywordsStr := strings.TrimPrefix(line, "关键词：")
-			keywordsStr = strings.TrimPrefix(keywordsStr, "Key words:")
+		var keywordsStr string
+		var ok bool
 
-			// 简单分割
-			kwList := strings.FieldsFunc(keywordsStr, func(r rune) bool {
-				return r == '；' || r == ';' || r == ' ' || r == ','
-			})
-
-			var keywords []string
-			for _, kw := range kwList {
-				kw = strings.TrimSpace(kw)
-				if len(kw) > 1 && len(keywords) < 5 {
-					keywords = append(keywords, kw)
-				}
-			}
-			return keywords
+		if keywordsStr, ok = strings.CutPrefix(line, "关键词："); ok {
+			// 中文关键词
+		} else if keywordsStr, ok = strings.CutPrefix(line, "Key words:"); ok {
+			// 英文关键词
+		} else {
+			continue
 		}
+
+		// 简单分割
+		kwList := strings.FieldsFunc(keywordsStr, func(r rune) bool {
+			return r == '；' || r == ';' || r == ' ' || r == ','
+		})
+
+		var keywords []string
+		for _, kw := range kwList {
+			kw = strings.TrimSpace(kw)
+			if len(kw) > 1 && len(keywords) < 5 {
+				keywords = append(keywords, kw)
+			}
+		}
+		return keywords
 	}
 	return []string{"未找到关键词"}
 }
@@ -836,57 +836,4 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-// testExtraction 测试ZIP文件提取功能
-func testExtraction() {
-	log.SetOutput(os.Stdout)
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-
-	zipPath := "/tmp/test_organization/test.zip"
-	pdfPath := "/tmp/test.pdf"
-
-	// 创建测试PDF文件
-	if err := os.WriteFile(pdfPath, []byte("test pdf content"), 0644); err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("开始测试ZIP文件提取功能...")
-	fmt.Printf("ZIP文件: %s\n", zipPath)
-	fmt.Printf("PDF文件: %s\n", pdfPath)
-
-	if err := core.OrganizeResult(zipPath, pdfPath); err != nil {
-		log.Printf("组织失败: %v", err)
-	} else {
-		fmt.Println("组织完成")
-	}
-
-	// 检查结果
-	resultDir := "data/results"
-	if entries, err := os.ReadDir(resultDir); err == nil {
-		fmt.Printf("结果目录内容:\n")
-		for _, entry := range entries {
-			if entry.IsDir() {
-				fmt.Printf("  %s/\n", entry.Name())
-				// 检查子目录内容
-				subPath := filepath.Join(resultDir, entry.Name())
-				if files, err := os.ReadDir(subPath); err == nil {
-					for _, file := range files {
-						info, _ := file.Info()
-						fmt.Printf("    %s (%d bytes)\n", file.Name(), info.Size())
-					}
-				}
-			}
-		}
-	}
-}
-
-// runMCPServer 启动MCP服务器模式
-func runMCPServer() {
-	// TODO: 重新实现基于MCPManager的服务器模式
-	log.Printf("MCP服务器模式暂未实现")
-	log.Printf("请使用CLI命令进行文献管理，如：")
-	log.Printf("  ./zoteroflow2 list")
-	log.Printf("  ./zoteroflow2 search <关键词>")
-	log.Printf("  ./zoteroflow2 related <文献> [问题]")
 }

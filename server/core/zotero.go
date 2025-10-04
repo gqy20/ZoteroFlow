@@ -288,8 +288,8 @@ func (z *ZoteroDB) getItemTags(itemID int) ([]string, error) {
 // buildPDFPath 构建PDF文件路径 (30行)
 func (z *ZoteroDB) buildPDFPath(pdfPath string) string {
 	// 处理两种路径格式:
-	// 1. attachments:分类:年份_标题.pdf
-	// 2. 附件项的直接路径 (storage:XXXXXX.pdf)
+	// attachments:分类:年份_标题.pdf
+	// storage:XXXXXX.pdf 或直接文件名
 
 	if strings.HasPrefix(pdfPath, "attachments:") {
 		// attachments:格式路径 - 解析并查找实际文件
@@ -299,11 +299,11 @@ func (z *ZoteroDB) buildPDFPath(pdfPath string) string {
 	// 处理路径分隔符 - 统一为系统路径分隔符
 	pdfPath = filepath.FromSlash(pdfPath)
 
-	// 直接路径格式 - storage:XXXXXX.pdf 或直接文件名
+	// 处理包含冒号的路径格式
 	if strings.Contains(pdfPath, ":") {
 		parts := strings.Split(pdfPath, ":")
 		if len(parts) >= 2 {
-			// storage:XXXXXX.pdf 格式
+			// 提取路径中的文件夹部分
 			folderName := parts[1]
 			if folderName != "" {
 				storagePath := filepath.Join(z.dataDir, folderName)

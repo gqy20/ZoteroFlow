@@ -205,7 +205,7 @@ func (c *MCPClient) initialize() error {
 		},
 	}
 
-	if err := c.sendRequestMap(initReq); err != nil {
+	if err := c.sendRequest(initReq); err != nil {
 		return fmt.Errorf("发送初始化请求失败: %w", err)
 	}
 
@@ -229,7 +229,7 @@ func (c *MCPClient) initialize() error {
 				"jsonrpc": "2.0",
 				"method":  "notifications/initialized",
 			}
-			c.sendRequestMap(notifReq)
+			c.sendRequest(notifReq)
 			return nil
 		}
 	}
@@ -352,12 +352,16 @@ func (c *MCPClient) CallTool(toolName string, arguments map[string]interface{}) 
 		},
 	}
 
-	requestJSON, _ := json.MarshalIndent(callReq, "", "  ")
+	requestJSON, err := json.MarshalIndent(callReq, "", "  ")
+	if err != nil {
+		log.Printf("⚠️ [MCP警告] 序列化请求数据失败: %v", err)
+		requestJSON = []byte("序列化失败")
+	}
 	log.Printf("📤 [MCP请求] 完整请求数据 (ID: %d):\n%s", c.nextID, string(requestJSON))
 	c.nextID++
 
 	// 发送请求
-	if err := c.sendRequestMap(callReq); err != nil {
+	if err := c.sendRequest(callReq); err != nil {
 		log.Printf("❌ [MCP错误] 发送工具调用请求失败: %v", err)
 		return nil, fmt.Errorf("发送工具调用请求失败: %w", err)
 	}
@@ -372,11 +376,19 @@ func (c *MCPClient) CallTool(toolName string, arguments map[string]interface{}) 
 	}
 
 	// 记录响应信息
-	responseJSON, _ := json.MarshalIndent(response, "", "  ")
+	responseJSON, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		log.Printf("⚠️ [MCP警告] 序列化响应数据失败: %v", err)
+		responseJSON = []byte("序列化失败")
+	}
 	log.Printf("📥 [MCP响应] 完整响应数据:\n%s", string(responseJSON))
 
 	if response.Error != nil {
-		errorJSON, _ := json.MarshalIndent(response.Error, "", "  ")
+		errorJSON, err := json.MarshalIndent(response.Error, "", "  ")
+		if err != nil {
+			log.Printf("⚠️ [MCP警告] 序列化错误数据失败: %v", err)
+			errorJSON = []byte("序列化失败")
+		}
 		log.Printf("❌ [MCP错误] 服务器返回错误:\n%s", string(errorJSON))
 		return nil, fmt.Errorf("MCP错误: %s", response.Error.Message)
 	}
@@ -408,23 +420,8 @@ func (c *MCPClient) CallTool(toolName string, arguments map[string]interface{}) 
 	return response, nil
 }
 
-// sendRequest 发送请求（保留向后兼容）
-func (c *MCPClient) sendRequest(req MCPRequest) error {
-	data, err := json.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	_, err = c.stdin.Write(append(data, '\n'))
-	if err != nil {
-		return fmt.Errorf("发送数据失败: %w", err)
-	}
-
-	return nil
-}
-
-// sendRequestMap 发送map格式请求（确保JSON格式正确）
-func (c *MCPClient) sendRequestMap(req map[string]interface{}) error {
+// sendRequest 发送请求（支持map和struct格式）
+func (c *MCPClient) sendRequest(req interface{}) error {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("序列化请求失败: %w", err)
