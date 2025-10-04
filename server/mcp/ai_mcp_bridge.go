@@ -17,9 +17,9 @@ import (
 
 // MCPTool MCP工具信息
 type MCPTool struct {
-	Server    string `json:"server"`
-	Name      string `json:"name"`
-	Desc      string `json:"description"`
+	Server    string                 `json:"server"`
+	Name      string                 `json:"name"`
+	Desc      string                 `json:"description"`
 	Arguments map[string]interface{} `json:"arguments"`
 }
 
@@ -34,7 +34,7 @@ type ToolCall struct {
 type CachedResult struct {
 	Response *MCPResponse
 	Time     time.Time
-	 TTL     time.Duration
+	TTL      time.Duration
 }
 
 // ToolCallCache 工具调用缓存
@@ -88,12 +88,12 @@ func (amb *AIMCPBridge) generateCacheKey(toolCall *ToolCall) string {
 
 // AIMCPBridge AI与MCP的桥接器
 type AIMCPBridge struct {
-	aiClient  core.AIClient
-	config    *config.Config
-	mcpManager *MCPManager
+	aiClient    core.AIClient
+	config      *config.Config
+	mcpManager  *MCPManager
 	managerOnce sync.Once
-	initError  error
-	cache     *ToolCallCache
+	initError   error
+	cache       *ToolCallCache
 }
 
 // NewAIMCPBridge 创建AI-MCP桥接器
@@ -147,14 +147,14 @@ func (amb *AIMCPBridge) getArticleMCPTools(manager *MCPManager) ([]MCPTool, erro
 			Desc:   "搜索欧洲生物医学文献数据库",
 			Arguments: map[string]interface{}{
 				"keyword": map[string]interface{}{
-					"type": "string",
+					"type":        "string",
 					"description": "搜索关键词",
-					"required": true,
+					"required":    true,
 				},
 				"max_results": map[string]interface{}{
-					"type": "integer",
+					"type":        "integer",
 					"description": "最大结果数",
-					"default": 10,
+					"default":     10,
 				},
 			},
 		},
@@ -164,14 +164,14 @@ func (amb *AIMCPBridge) getArticleMCPTools(manager *MCPManager) ([]MCPTool, erro
 			Desc:   "搜索arXiv预印本论文",
 			Arguments: map[string]interface{}{
 				"keyword": map[string]interface{}{
-					"type": "string",
+					"type":        "string",
 					"description": "搜索关键词",
-					"required": true,
+					"required":    true,
 				},
 				"max_results": map[string]interface{}{
-					"type": "integer",
+					"type":        "integer",
 					"description": "最大结果数",
-					"default": 5,
+					"default":     5,
 				},
 			},
 		},
@@ -181,9 +181,9 @@ func (amb *AIMCPBridge) getArticleMCPTools(manager *MCPManager) ([]MCPTool, erro
 			Desc:   "获取文献详细信息",
 			Arguments: map[string]interface{}{
 				"identifier": map[string]interface{}{
-					"type": "string",
+					"type":        "string",
 					"description": "文献标识符(PMID/DOI/PMCID)",
-					"required": true,
+					"required":    true,
 				},
 			},
 		},
@@ -215,19 +215,19 @@ func (amb *AIMCPBridge) getContext7Tools(manager *MCPManager) ([]MCPTool, error)
 			Desc:   "获取编程库文档",
 			Arguments: map[string]interface{}{
 				"context7CompatibleLibraryID": map[string]interface{}{
-					"type": "string",
+					"type":        "string",
 					"description": "Context7兼容的库ID (如: /mongodb/docs, /vercel/next.js)",
-					"required": true,
+					"required":    true,
 				},
 				"topic": map[string]interface{}{
-					"type": "string",
+					"type":        "string",
 					"description": "要关注的主题 (如: hooks, routing)",
-					"required": false,
+					"required":    false,
 				},
 				"tokens": map[string]interface{}{
-					"type": "integer",
+					"type":        "integer",
 					"description": "最大令牌数 (默认: 5000)",
-					"required": false,
+					"required":    false,
 				},
 			},
 		},
@@ -237,9 +237,9 @@ func (amb *AIMCPBridge) getContext7Tools(manager *MCPManager) ([]MCPTool, error)
 			Desc:   "解析库标识符",
 			Arguments: map[string]interface{}{
 				"libraryName": map[string]interface{}{
-					"type": "string",
+					"type":        "string",
 					"description": "库名称",
-					"required": true,
+					"required":    true,
 				},
 			},
 		},
@@ -281,10 +281,10 @@ func (amb *AIMCPBridge) quickToolSelection(message string) *ToolCall {
 	switch {
 	// Context7工具 - 编程相关查询
 	case strings.Contains(message, "库") || strings.Contains(message, "library") ||
-		 strings.Contains(message, "文档") || strings.Contains(message, "documentation") ||
-		 strings.Contains(message, "代码") || strings.Contains(message, "code") ||
-		 strings.Contains(message, "api") || strings.Contains(message, "tutorial") ||
-		 strings.Contains(message, "示例") || strings.Contains(message, "example"):
+		strings.Contains(message, "文档") || strings.Contains(message, "documentation") ||
+		strings.Contains(message, "代码") || strings.Contains(message, "code") ||
+		strings.Contains(message, "api") || strings.Contains(message, "tutorial") ||
+		strings.Contains(message, "示例") || strings.Contains(message, "example"):
 
 		// 编程语言和框架关键词
 		programmingKeywords := []string{
@@ -350,7 +350,7 @@ func (amb *AIMCPBridge) quickToolSelection(message string) *ToolCall {
 				Server: "article-mcp",
 				Tool:   "get_similar_articles",
 				Arguments: map[string]interface{}{
-					"identifier": amb.extractDOI(message),
+					"identifier":  amb.extractDOI(message),
 					"max_results": 3,
 				},
 			}
@@ -363,7 +363,7 @@ func (amb *AIMCPBridge) quickToolSelection(message string) *ToolCall {
 				Server: "article-mcp",
 				Tool:   "get_citing_articles",
 				Arguments: map[string]interface{}{
-					"identifier": amb.extractDOI(message),
+					"identifier":  amb.extractDOI(message),
 					"max_results": 3,
 				},
 			}
@@ -645,8 +645,8 @@ func (amb *AIMCPBridge) callAIForToolSelection(message, systemPrompt string) str
 	}
 
 	req := &core.AIRequest{
-		Model:    amb.config.AIModel,
-		Messages: messages,
+		Model:     amb.config.AIModel,
+		Messages:  messages,
 		MaxTokens: 300, // 限制长度，避免冗长的回复
 	}
 

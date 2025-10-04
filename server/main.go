@@ -720,8 +720,8 @@ func callAIWithoutTools(client core.AIClient, message string) {
 	}
 
 	req := &core.AIRequest{
-		Model:    cfg.AIModel,
-		Messages: messages,
+		Model:     cfg.AIModel,
+		Messages:  messages,
 		MaxTokens: 500,
 	}
 
