@@ -242,22 +242,43 @@ func isImageFile(filename string) bool {
 
 // generateMeta 生成元数据文件
 func generateMeta(targetDir, originalPath, pdfPath string) error {
+	log.Printf("开始生成元数据文件: %s", targetDir)
+
 	// 获取文件信息
 	stat, err := os.Stat(pdfPath)
 	if err != nil {
+		log.Printf("获取PDF文件信息失败: %v", err)
 		return err
 	}
 
 	// 读取内容提取信息
 	contentFile := filepath.Join(targetDir, "full.md")
 	content := ""
-	if data, err := os.ReadFile(contentFile); err == nil {
-		content = extractBasicInfo(string(data))
+
+	// 检查full.md是否存在且有内容
+	if contentInfo, err := os.Stat(contentFile); err == nil && contentInfo.Size() > 0 {
+		if data, err := os.ReadFile(contentFile); err == nil {
+			content = string(data)
+			log.Printf("成功读取内容文件，大小: %d bytes", len(content))
+		} else {
+			log.Printf("读取内容文件失败: %v", err)
+		}
+	} else {
+		log.Printf("内容文件不存在或为空，跳过内容提取")
+	}
+
+	// 提取标题和作者
+	title := extractTitle(originalPath)
+	authors := extractAuthors(content)
+
+	// 如果从内容中提取不到作者，使用默认值
+	if authors == "未知" && content == "" {
+		authors = "解析中..."
 	}
 
 	info := ParsedFileInfo{
-		Title:    extractTitle(originalPath),
-		Authors:  extractAuthors(content),
+		Title:    title,
+		Authors:  authors,
 		Date:     time.Now().Format("2006-01-02"),
 		Size:     stat.Size(),
 		Duration: 0, // 这里可以后续从解析记录获取
@@ -267,10 +288,17 @@ func generateMeta(targetDir, originalPath, pdfPath string) error {
 	metaFile := filepath.Join(targetDir, "meta.json")
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
+		log.Printf("序列化元数据失败: %v", err)
 		return err
 	}
 
-	return os.WriteFile(metaFile, data, 0644)
+	if err := os.WriteFile(metaFile, data, 0644); err != nil {
+		log.Printf("写入元数据文件失败: %v", err)
+		return err
+	}
+
+	log.Printf("成功生成元数据文件: %s", metaFile)
+	return nil
 }
 
 // extractBasicInfo 从内容中提取基本信息

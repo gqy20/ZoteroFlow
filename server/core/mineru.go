@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -262,14 +263,14 @@ func (c *MinerUClient) ParsePDF(ctx context.Context, pdfPath string) (*ParseResu
 
 	log.Printf("Parsing completed successfully! Duration: %dms, Result saved to: %s", duration, zipPath)
 
-	// 异步组织文件，不阻塞主流程
-	go func() {
-		if err := OrganizeResult(zipPath, pdfPath); err != nil {
-			log.Printf("文件组织失败: %v", err)
-		} else {
-			log.Printf("文件组织完成")
-		}
-	}()
+	// 同步组织文件，确保文件组织成功
+	log.Printf("开始组织文件: %s", zipPath)
+	if err := OrganizeResult(zipPath, pdfPath); err != nil {
+		log.Printf("⚠️ 文件组织失败: %v", err)
+		// 不影响主流程，但记录错误
+	} else {
+		log.Printf("✅ 文件组织完成")
+	}
 
 	return result, nil
 }
@@ -425,7 +426,7 @@ func (c *MinerUClient) downloadResult(ctx context.Context, resultURL, outputPath
 	return err
 }
 
-// saveParseRecord 保存解析记录到CSV
+// saveParseRecord 保存解析记录到统一CSV文件
 func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 	recordsDir := "data/records"
 
@@ -434,9 +435,8 @@ func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 		return fmt.Errorf("创建记录目录失败: %w", err)
 	}
 
-	// 按日期创建CSV文件
-	dateStr := record.ParseTime.Format("2006-01-02")
-	csvPath := filepath.Join(recordsDir, "mineru_parse_records_"+dateStr+".csv")
+	// 使用统一的CSV文件
+	csvPath := filepath.Join(recordsDir, "mineru_parse_records.csv")
 
 	// 检查文件是否存在，如果不存在则创建并写入标题
 	fileExists := true
@@ -491,11 +491,8 @@ func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 func GetParseRecords(date string) ([]ParseRecord, error) {
 	recordsDir := "data/records"
 
-	if date == "" {
-		date = time.Now().Format("2006-01-02")
-	}
-
-	csvPath := filepath.Join(recordsDir, "mineru_parse_records_"+date+".csv")
+	// 总是使用统一的CSV文件
+	csvPath := filepath.Join(recordsDir, "mineru_parse_records.csv")
 
 	file, err := os.Open(csvPath)
 	if err != nil {
@@ -546,4 +543,130 @@ func GetParseRecords(date string) ([]ParseRecord, error) {
 	}
 
 	return parseRecords, nil
+}
+
+// ValidateAndRebuildRecords 验证并重建记录，删除不存在的文件条目
+func ValidateAndRebuildRecords() error {
+	recordsDir := "data/records"
+	csvPath := filepath.Join(recordsDir, "mineru_parse_records.csv")
+
+	// 如果CSV文件不存在，无需验证
+	if _, err := os.Stat(csvPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	log.Printf("开始验证解析记录与实际文件的对应关系...")
+
+	// 读取现有记录
+	records, err := GetParseRecords("")
+	if err != nil {
+		return fmt.Errorf("读取现有记录失败: %w", err)
+	}
+
+	// 验证每个记录对应的文件是否存在
+	var validRecords []ParseRecord
+	removedCount := 0
+
+	for _, record := range records {
+		isValid := false
+
+		if record.Status == "completed" && record.ZipPath != "" {
+			// 检查ZIP文件是否存在
+			if _, err := os.Stat(record.ZipPath); err == nil {
+				isValid = true
+			} else {
+				// ZIP文件不存在，检查是否已经组织到results目录
+				resultDir := filepath.Join("data/results", extractFolderNameFromZipPath(record.ZipPath))
+				if _, err := os.Stat(resultDir); err == nil {
+					// 更新路径为组织后的目录
+					record.ZipPath = resultDir
+					isValid = true
+				}
+			}
+		} else if record.Status == "failed" {
+			// 失败的记录保留，但可以添加额外的验证逻辑
+			isValid = true
+		}
+
+		if isValid {
+			validRecords = append(validRecords, record)
+		} else {
+			removedCount++
+			log.Printf("移除无效记录: %s (文件不存在)", record.FileName)
+		}
+	}
+
+	if removedCount > 0 {
+		log.Printf("发现 %d 条无效记录，正在重建CSV文件...", removedCount)
+
+		// 备份原文件
+		backupPath := csvPath + ".backup"
+		if err := copyFile(csvPath, backupPath); err != nil {
+			log.Printf("备份原CSV文件失败: %v", err)
+		} else {
+			log.Printf("原CSV文件已备份到: %s", backupPath)
+		}
+
+		// 重新创建CSV文件
+		if err := rebuildCSVFile(csvPath, validRecords); err != nil {
+			return fmt.Errorf("重建CSV文件失败: %w", err)
+		}
+
+		log.Printf("CSV文件重建完成，保留 %d 条有效记录", len(validRecords))
+	} else {
+		log.Printf("所有记录都有效，无需重建")
+	}
+
+	return nil
+}
+
+// extractFolderNameFromZipPath 从ZIP路径提取文件夹名称
+func extractFolderNameFromZipPath(zipPath string) string {
+	// 从路径中提取文件名（不带扩展名）
+	filename := filepath.Base(zipPath)
+	folderName := strings.TrimSuffix(filename, filepath.Ext(filename))
+	return folderName
+}
+
+// rebuildCSVFile 重建CSV文件
+func rebuildCSVFile(csvPath string, records []ParseRecord) error {
+	file, err := os.Create(csvPath)
+	if err != nil {
+		return fmt.Errorf("创建CSV文件失败: %w", err)
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	// 写入标题行
+	headers := []string{
+		"id", "task_id", "file_name", "pdf_path", "file_size",
+		"status", "zip_path", "parse_time", "duration_ms", "error_message",
+	}
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("写入CSV标题失败: %w", err)
+	}
+
+	// 写入所有有效记录
+	for _, record := range records {
+		recordData := []string{
+			record.ID,
+			record.TaskID,
+			record.FileName,
+			record.PDFPath,
+			strconv.FormatInt(record.FileSize, 10),
+			record.Status,
+			record.ZipPath,
+			record.ParseTime.Format("2006-01-02 15:04:05"),
+			strconv.FormatInt(record.Duration, 10),
+			record.ErrorMessage,
+		}
+
+		if err := writer.Write(recordData); err != nil {
+			return fmt.Errorf("写入CSV记录失败: %w", err)
+		}
+	}
+
+	return nil
 }

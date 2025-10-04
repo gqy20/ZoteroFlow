@@ -237,6 +237,14 @@ func readMeta(metaFile string) *core.ParsedFileInfo {
 func runBasicTest() {
 	log.Println("=== ZoteroFlow2 MinerU Integration Test ===")
 
+	// 0. 验证并重建解析记录（确保数据一致性）
+	log.Println("验证解析记录与实际文件的对应关系...")
+	if err := core.ValidateAndRebuildRecords(); err != nil {
+		log.Printf("验证记录失败: %v", err)
+	} else {
+		log.Println("✅ 记录验证完成")
+	}
+
 	// 1. 加载配置
 	cfg := loadConfigWithCheck()
 	if cfg == nil {
