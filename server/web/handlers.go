@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"zoteroflow2-server/config"
 	"zoteroflow2-server/core"
 	"zoteroflow2-server/mcp"
-	"github.com/gin-gonic/gin"
 )
 
 // AskRequest 请求结构
@@ -132,7 +132,6 @@ func handleRelatedLiterature(query string, cfg *config.Config) (string, string) 
 	return handleRealAIChat(enhancedQuery, cfg)
 }
 
-
 // extractDocumentName 从查询中提取文献名称
 func extractDocumentName(query string) string {
 	// 简单的文献名称提取逻辑
@@ -242,7 +241,7 @@ func handleRealAIChat(query string, cfg *config.Config) (string, string) {
 					Content: query,
 				},
 			},
-			MaxTokens: 1000,
+			MaxTokens:   1000,
 			Temperature: 0.7,
 		}
 
@@ -307,7 +306,7 @@ func handleRealAIChat(query string, cfg *config.Config) (string, string) {
 						Content: analysisPrompt,
 					},
 				},
-				MaxTokens: 2000,
+				MaxTokens:   2000,
 				Temperature: 0.3,
 			}
 
@@ -375,9 +374,9 @@ func containsAny(text string, keywords []string) bool {
 // HandleStatus 系统状态检查
 func HandleStatus(c *gin.Context) {
 	status := gin.H{
-		"status":    "running",
-		"mode":      "web",
-		"version":   "v1.0.0",
+		"status":  "running",
+		"mode":    "web",
+		"version": "v1.0.0",
 		"features": []string{
 			"AI问答",
 			"PDF查看",
