@@ -426,7 +426,7 @@ func (c *MinerUClient) downloadResult(ctx context.Context, resultURL, outputPath
 	return err
 }
 
-// saveParseRecord 保存解析记录到统一CSV文件
+// saveParseRecord 保存解析记录到对应的CSV文件
 func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 	recordsDir := "data/records"
 
@@ -435,8 +435,13 @@ func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 		return fmt.Errorf("创建记录目录失败: %w", err)
 	}
 
-	// 使用统一的CSV文件
-	csvPath := filepath.Join(recordsDir, "mineru_parse_records.csv")
+	// 根据状态选择不同的CSV文件
+	var csvPath string
+	if record.Status == "failed" {
+		csvPath = filepath.Join(recordsDir, "mineru_failed_records.csv")
+	} else {
+		csvPath = filepath.Join(recordsDir, "mineru_success_records.csv")
+	}
 
 	// 检查文件是否存在，如果不存在则创建并写入标题
 	fileExists := true
@@ -491,9 +496,33 @@ func (c *MinerUClient) saveParseRecord(record ParseRecord) error {
 func GetParseRecords(date string) ([]ParseRecord, error) {
 	recordsDir := "data/records"
 
-	// 总是使用统一的CSV文件
-	csvPath := filepath.Join(recordsDir, "mineru_parse_records.csv")
+	var parseRecords []ParseRecord
 
+	// 读取成功记录文件
+	successCSV := filepath.Join(recordsDir, "mineru_success_records.csv")
+	if records, err := readCSVFile(successCSV); err == nil {
+		parseRecords = append(parseRecords, records...)
+	}
+
+	// 读取失败记录文件
+	failedCSV := filepath.Join(recordsDir, "mineru_failed_records.csv")
+	if records, err := readCSVFile(failedCSV); err == nil {
+		parseRecords = append(parseRecords, records...)
+	}
+
+	// 如果两个文件都不存在，尝试读取旧文件（向后兼容）
+	legacyCSV := filepath.Join(recordsDir, "mineru_parse_records.csv")
+	if len(parseRecords) == 0 {
+		if records, err := readCSVFile(legacyCSV); err == nil {
+			parseRecords = append(parseRecords, records...)
+		}
+	}
+
+	return parseRecords, nil
+}
+
+// readCSVFile 读取CSV文件并返回记录列表
+func readCSVFile(csvPath string) ([]ParseRecord, error) {
 	file, err := os.Open(csvPath)
 	if err != nil {
 		return nil, fmt.Errorf("打开CSV文件失败: %w", err)
@@ -548,12 +577,6 @@ func GetParseRecords(date string) ([]ParseRecord, error) {
 // ValidateAndRebuildRecords 验证并重建记录，删除不存在的文件条目
 func ValidateAndRebuildRecords() error {
 	recordsDir := "data/records"
-	csvPath := filepath.Join(recordsDir, "mineru_parse_records.csv")
-
-	// 如果CSV文件不存在，无需验证
-	if _, err := os.Stat(csvPath); os.IsNotExist(err) {
-		return nil
-	}
 
 	log.Printf("开始验证解析记录与实际文件的对应关系...")
 
@@ -563,8 +586,9 @@ func ValidateAndRebuildRecords() error {
 		return fmt.Errorf("读取现有记录失败: %w", err)
 	}
 
-	// 验证每个记录对应的文件是否存在
-	var validRecords []ParseRecord
+	// 分离有效记录
+	var validSuccessRecords []ParseRecord
+	var validFailedRecords []ParseRecord
 	removedCount := 0
 
 	for _, record := range records {
@@ -589,7 +613,11 @@ func ValidateAndRebuildRecords() error {
 		}
 
 		if isValid {
-			validRecords = append(validRecords, record)
+			if record.Status == "completed" {
+				validSuccessRecords = append(validSuccessRecords, record)
+			} else {
+				validFailedRecords = append(validFailedRecords, record)
+			}
 		} else {
 			removedCount++
 			log.Printf("移除无效记录: %s (文件不存在)", record.FileName)
@@ -599,20 +627,35 @@ func ValidateAndRebuildRecords() error {
 	if removedCount > 0 {
 		log.Printf("发现 %d 条无效记录，正在重建CSV文件...", removedCount)
 
-		// 备份原文件
-		backupPath := csvPath + ".backup"
-		if err := copyFile(csvPath, backupPath); err != nil {
-			log.Printf("备份原CSV文件失败: %v", err)
+		// 重建成功记录文件
+		successCSV := filepath.Join(recordsDir, "mineru_success_records.csv")
+		if err := rebuildCSVFile(successCSV, validSuccessRecords); err != nil {
+			log.Printf("重建成功记录文件失败: %v", err)
 		} else {
-			log.Printf("原CSV文件已备份到: %s", backupPath)
+			log.Printf("成功记录文件重建完成，保留 %d 条记录", len(validSuccessRecords))
 		}
 
-		// 重新创建CSV文件
-		if err := rebuildCSVFile(csvPath, validRecords); err != nil {
-			return fmt.Errorf("重建CSV文件失败: %w", err)
+		// 重建失败记录文件
+		failedCSV := filepath.Join(recordsDir, "mineru_failed_records.csv")
+		if err := rebuildCSVFile(failedCSV, validFailedRecords); err != nil {
+			log.Printf("重建失败记录文件失败: %v", err)
+		} else {
+			log.Printf("失败记录文件重建完成，保留 %d 条记录", len(validFailedRecords))
 		}
 
-		log.Printf("CSV文件重建完成，保留 %d 条有效记录", len(validRecords))
+		// 备份并删除旧的统一CSV文件
+		legacyCSV := filepath.Join(recordsDir, "mineru_parse_records.csv")
+		if _, err := os.Stat(legacyCSV); err == nil {
+			backupPath := legacyCSV + ".backup"
+			if err := copyFile(legacyCSV, backupPath); err != nil {
+				log.Printf("备份旧CSV文件失败: %v", err)
+			} else {
+				log.Printf("旧CSV文件已备份到: %s", backupPath)
+				os.Remove(legacyCSV)
+			}
+		}
+
+		log.Printf("CSV文件重建完成，总共保留 %d 条有效记录", len(validSuccessRecords)+len(validFailedRecords))
 	} else {
 		log.Printf("所有记录都有效，无需重建")
 	}

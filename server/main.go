@@ -152,19 +152,33 @@ func listResults() {
 		return
 	}
 
-	fmt.Printf("找到 %d 个解析结果:\n\n", len(entries))
-
-	for i, entry := range entries {
-		if entry.IsDir() && entry.Name() != "latest" {
+	// 先过滤出有效的结果文件夹
+	var validResults []os.DirEntry
+	for _, entry := range entries {
+		if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
 			metaFile := filepath.Join(resultsDir, entry.Name(), "meta.json")
 			if info := readMeta(metaFile); info != nil {
-				fmt.Printf("[%d] %s\n", i+1, entry.Name())
-				fmt.Printf("     标题: %s\n", info.Title)
-				fmt.Printf("     作者: %s\n", info.Authors)
-				fmt.Printf("     大小: %.1f MB\n", float64(info.Size)/1024/1024)
-				fmt.Printf("     日期: %s\n", info.Date)
-				fmt.Println()
+				validResults = append(validResults, entry)
 			}
+		}
+	}
+
+	if len(validResults) == 0 {
+		fmt.Println("暂无解析结果")
+		return
+	}
+
+	fmt.Printf("找到 %d 个解析结果:\n\n", len(validResults))
+
+	for i, entry := range validResults {
+		metaFile := filepath.Join(resultsDir, entry.Name(), "meta.json")
+		if info := readMeta(metaFile); info != nil {
+			fmt.Printf("[%d] %s\n", i+1, entry.Name())
+			fmt.Printf("     标题: %s\n", info.Title)
+			fmt.Printf("     作者: %s\n", info.Authors)
+			fmt.Printf("     大小: %.1f MB\n", float64(info.Size)/1024/1024)
+			fmt.Printf("     日期: %s\n", info.Date)
+			fmt.Println()
 		}
 	}
 }
@@ -243,6 +257,22 @@ func runBasicTest() {
 		log.Printf("验证记录失败: %v", err)
 	} else {
 		log.Println("✅ 记录验证完成")
+	}
+
+	// 0.5. 重新生成缺失或无效的meta.json文件
+	log.Println("检查并重新生成缺失的meta.json文件...")
+	if err := core.RegenerateMissingMeta(); err != nil {
+		log.Printf("重新生成meta.json失败: %v", err)
+	} else {
+		log.Println("✅ meta.json检查完成")
+	}
+
+	// 0.6. 清理冗余的ZIP文件
+	log.Println("清理冗余的ZIP文件...")
+	if err := core.CleanupRedundantZIPs(); err != nil {
+		log.Printf("清理ZIP文件失败: %v", err)
+	} else {
+		log.Println("✅ ZIP文件清理完成")
 	}
 
 	// 1. 加载配置
