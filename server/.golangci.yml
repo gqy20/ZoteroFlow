@@ -64,6 +64,7 @@ issues:
         - gosec
 
 output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
+  formats:
+    - format: colored-line-number
+      print-issued-lines: true
+      print-linter-name: true
