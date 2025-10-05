@@ -55,4 +55,4 @@ data/temp/
 # Backup files
 *.backup
 *.bak
-*.old
+*.old.env
